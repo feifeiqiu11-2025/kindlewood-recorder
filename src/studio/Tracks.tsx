@@ -1,5 +1,5 @@
 import { useRef, type PointerEvent as ReactPointerEvent } from "react";
-import type { ZoomBlock } from "../types/project";
+import type { Segment, ZoomBlock } from "../types/project";
 import "./Tracks.css";
 
 const LABEL_W = 132;
@@ -7,12 +7,10 @@ const MIN_LEN = 0.3;
 const clamp = (v: number, lo: number, hi: number) =>
   Math.max(lo, Math.min(hi, v));
 
-type Trim = { startSec: number; endSec: number };
-
 type DragKind =
   | { kind: "seek" }
-  | { kind: "trimStart" }
-  | { kind: "trimEnd" }
+  | { kind: "segStart"; id: string }
+  | { kind: "segEnd"; id: string }
   | { kind: "zoomMove"; id: string; grabSec: number; lenSec: number }
   | { kind: "zoomStart"; id: string }
   | { kind: "zoomEnd"; id: string };
@@ -21,18 +19,17 @@ type TracksProps = {
   duration: number;
   pixelsPerSec: number;
   currentTime: number;
-  trim: Trim;
+  segments: Segment[];
   zooms: ZoomBlock[];
   selectedId: string | null;
   hasVideo: boolean;
   onSeek: (t: number) => void;
-  onTrim: (t: Trim) => void;
-  onSelectZoom: (id: string | null) => void;
+  onSelect: (id: string | null) => void;
   onMoveZoom: (id: string, startSec: number, endSec: number) => void;
+  onTrimSegment: (id: string, startSec: number, endSec: number) => void;
 };
 
 function tickStep(pps: number): number {
-  // Aim for a label roughly every 70px.
   const target = 70 / pps;
   const steps = [0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300];
   return steps.find((s) => s >= target) ?? 600;
@@ -45,14 +42,14 @@ export function Tracks({
   duration,
   pixelsPerSec,
   currentTime,
-  trim,
+  segments,
   zooms,
   selectedId,
   hasVideo,
   onSeek,
-  onTrim,
-  onSelectZoom,
+  onSelect,
   onMoveZoom,
+  onTrimSegment,
 }: TracksProps) {
   const videoLaneRef = useRef<HTMLDivElement>(null);
   const zoomLaneRef = useRef<HTMLDivElement>(null);
@@ -60,8 +57,6 @@ export function Tracks({
 
   const px = (t: number) => t * pixelsPerSec;
   const laneWidth = Math.max(duration * pixelsPerSec, 1);
-  // Before a recording exists, let lanes flex to fill the width instead of
-  // collapsing to a 70px sliver with overflowing hint text.
   const fill = !hasVideo;
   const laneStyle = fill ? { flex: 1, minWidth: 0 } : { width: laneWidth };
   const contentStyle = fill ? { width: "100%" } : { width: LABEL_W + laneWidth };
@@ -90,14 +85,16 @@ export function Tracks({
       case "seek":
         onSeek(timeAt(e.clientX, videoLaneRef.current));
         break;
-      case "trimStart": {
+      case "segStart": {
         const t = timeAt(e.clientX, videoLaneRef.current);
-        onTrim({ startSec: Math.min(t, trim.endSec - MIN_LEN), endSec: trim.endSec });
+        const s = segments.find((g) => g.id === drag.id);
+        if (s) onTrimSegment(drag.id, Math.min(t, s.endSec - MIN_LEN), s.endSec);
         break;
       }
-      case "trimEnd": {
+      case "segEnd": {
         const t = timeAt(e.clientX, videoLaneRef.current);
-        onTrim({ startSec: trim.startSec, endSec: Math.max(t, trim.startSec + MIN_LEN) });
+        const s = segments.find((g) => g.id === drag.id);
+        if (s) onTrimSegment(drag.id, s.startSec, Math.max(t, s.startSec + MIN_LEN));
         break;
       }
       case "zoomMove": {
@@ -146,7 +143,7 @@ export function Tracks({
           </div>
         </div>
 
-        {/* VIDEO */}
+        {/* VIDEO — kept segments as clips */}
         <div className="tracks__row">
           <div className="tracks__label" style={{ width: LABEL_W }}>
             <span className="tracks__label-name">VIDEO</span>
@@ -155,16 +152,40 @@ export function Tracks({
             ref={videoLaneRef}
             className="tracks__lane"
             style={laneStyle}
-            onPointerDown={(e) => hasVideo && begin(e, { kind: "seek" })}
+            onPointerDown={(e) => {
+              if (!hasVideo) return;
+              onSelect(null);
+              begin(e, { kind: "seek" });
+            }}
           >
             {hasVideo ? (
-              <>
-                <div className="tracks__clip" style={{ left: px(trim.startSec), width: px(trim.endSec - trim.startSec) }} />
-                <div className="tracks__dim" style={{ left: 0, width: px(trim.startSec) }} />
-                <div className="tracks__dim" style={{ left: px(trim.endSec), right: 0 }} />
-                <div className="tracks__trim" style={{ left: px(trim.startSec) }} onPointerDown={(e) => begin(e, { kind: "trimStart" })} title="Trim start" />
-                <div className="tracks__trim" style={{ left: px(trim.endSec) }} onPointerDown={(e) => begin(e, { kind: "trimEnd" })} title="Trim end" />
-              </>
+              segments.map((s) => (
+                <div
+                  key={s.id}
+                  className={`tracks__clip${s.id === selectedId ? " is-selected" : ""}`}
+                  style={{ left: px(s.startSec), width: px(s.endSec - s.startSec) }}
+                  onPointerDown={(e) => {
+                    onSelect(s.id);
+                    onSeek(timeAt(e.clientX, videoLaneRef.current));
+                    begin(e, { kind: "seek" });
+                  }}
+                >
+                  <span
+                    className="tracks__clip-edge"
+                    onPointerDown={(e) => {
+                      onSelect(s.id);
+                      begin(e, { kind: "segStart", id: s.id });
+                    }}
+                  />
+                  <span
+                    className="tracks__clip-edge tracks__clip-edge--r"
+                    onPointerDown={(e) => {
+                      onSelect(s.id);
+                      begin(e, { kind: "segEnd", id: s.id });
+                    }}
+                  />
+                </div>
+              ))
             ) : (
               <span className="tracks__empty">Record to add a video clip</span>
             )}
@@ -180,7 +201,7 @@ export function Tracks({
             ref={zoomLaneRef}
             className="tracks__lane"
             style={laneStyle}
-            onPointerDown={() => onSelectZoom(null)}
+            onPointerDown={() => onSelect(null)}
           >
             {zooms.map((z) => (
               <div
@@ -188,7 +209,7 @@ export function Tracks({
                 className={`tracks__zoom${z.id === selectedId ? " is-selected" : ""}`}
                 style={{ left: px(z.startSec), width: px(z.endSec - z.startSec) }}
                 onPointerDown={(e) => {
-                  onSelectZoom(z.id);
+                  onSelect(z.id);
                   begin(e, {
                     kind: "zoomMove",
                     id: z.id,

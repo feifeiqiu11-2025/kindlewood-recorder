@@ -132,6 +132,18 @@
   display: none;
 }
 
+.stage__pip--circle {
+  aspect-ratio: 1 / 1;
+  height: auto;
+  border-radius: 50%;
+}
+
+.stage__pip--square {
+  aspect-ratio: 1 / 1;
+  height: auto;
+  border-radius: 0;
+}
+
 .stage__pip--center {
   position: static;
   width: 30%;
@@ -232,12 +244,28 @@
   font-size: 0.9rem;
 }
 
-.toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  min-height: 40px;
+/* Toggle buttons (mic / camera) — consistent with the button system */
+.toggle-btn {
+  min-height: 38px;
+  padding: 0 0.9rem;
+  border: 1px solid #e3e2ee;
+  border-radius: 8px;
+  background: #fff;
+  color: #50506a;
+  font-size: 0.9rem;
+  font-weight: 600;
   cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+
+.toggle-btn:hover {
+  background: #f6f5fc;
+}
+
+.toggle-btn.is-on {
+  background: #efeaff;
+  border-color: #c7b9ff;
+  color: #4c30d8;
 }
 
 /* Buttons — one system across record + edit phases */
@@ -371,5 +399,18 @@
   .segmented__btn.is-active {
     background: #34344f;
     color: #fff;
+  }
+  .toggle-btn {
+    background: #21213a;
+    border-color: #34344f;
+    color: #c2c2da;
+  }
+  .toggle-btn:hover {
+    background: #2a2a48;
+  }
+  .toggle-btn.is-on {
+    background: #2c2350;
+    border-color: #5b3df5;
+    color: #c7b9ff;
   }
 }

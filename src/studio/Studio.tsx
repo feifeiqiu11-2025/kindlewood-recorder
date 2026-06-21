@@ -132,9 +132,16 @@ export function Studio() {
           }
         }
         setCurrentTime(v.currentTime);
-        if (!v.paused && v.currentTime >= p.trim.endSec) {
-          v.pause();
-          setPlaying(false);
+        if (!v.paused) {
+          // Skip deleted gaps: jump to the next kept segment, stop at the end.
+          const t = v.currentTime;
+          const seg = p.segments.find((s) => t < s.endSec - 1e-3);
+          if (!seg) {
+            v.pause();
+            setPlaying(false);
+          } else if (t < seg.startSec) {
+            v.currentTime = seg.startSec;
+          }
         }
       }
       raf = requestAnimationFrame(loop);
@@ -155,8 +162,10 @@ export function Studio() {
     const p = projectRef.current;
     if (!v || !p) return;
     if (v.paused) {
-      if (v.currentTime < p.trim.startSec || v.currentTime >= p.trim.endSec) {
-        v.currentTime = p.trim.startSec;
+      const first = p.segments[0].startSec;
+      const last = p.segments[p.segments.length - 1].endSec;
+      if (v.currentTime < first || v.currentTime >= last) {
+        v.currentTime = first;
       }
       void v.play();
       setPlaying(true);
@@ -173,8 +182,10 @@ export function Studio() {
 
   const addZoom = () => {
     if (!project) return;
-    const start = clamp(currentTime, project.trim.startSec, project.trim.endSec - MIN_LEN);
-    const end = Math.min(start + DEFAULT_ZOOM_LEN, project.trim.endSec);
+    const first = project.segments[0].startSec;
+    const last = project.segments[project.segments.length - 1].endSec;
+    const start = clamp(currentTime, first, last - MIN_LEN);
+    const end = Math.min(start + DEFAULT_ZOOM_LEN, last);
     const id = crypto.randomUUID();
     setProject({
       ...project,
@@ -194,23 +205,69 @@ export function Studio() {
     if (selectedId === id) setSelectedId(null);
   };
 
-  // Split the selected zoom block at the playhead into two adjacent blocks.
-  const splitSelectedZoom = () => {
+  // Split the selected clip (video segment or zoom block) at the playhead.
+  const splitSelected = () => {
     if (!project || !selectedId) return;
-    const z = project.zooms.find((b) => b.id === selectedId);
-    if (!z) return;
     const t = currentTime;
-    if (t <= z.startSec + MIN_LEN || t >= z.endSec - MIN_LEN) return;
-    const left = { ...z, endSec: t };
-    const right = { ...z, id: crypto.randomUUID(), startSec: t };
-    setProject({
-      ...project,
-      zooms: project.zooms
-        .flatMap((b) => (b.id === z.id ? [left, right] : [b]))
-        .sort((a, b) => a.startSec - b.startSec),
-    });
-    setSelectedId(left.id);
+    const seg = project.segments.find((s) => s.id === selectedId);
+    if (seg) {
+      if (t <= seg.startSec + MIN_LEN || t >= seg.endSec - MIN_LEN) return;
+      const left = { ...seg, endSec: t };
+      const right = { ...seg, id: crypto.randomUUID(), startSec: t };
+      setProject({
+        ...project,
+        segments: project.segments
+          .flatMap((s) => (s.id === seg.id ? [left, right] : [s]))
+          .sort((a, b) => a.startSec - b.startSec),
+      });
+      setSelectedId(left.id);
+      return;
+    }
+    const z = project.zooms.find((b) => b.id === selectedId);
+    if (z) {
+      if (t <= z.startSec + MIN_LEN || t >= z.endSec - MIN_LEN) return;
+      const left = { ...z, endSec: t };
+      const right = { ...z, id: crypto.randomUUID(), startSec: t };
+      setProject({
+        ...project,
+        zooms: project.zooms
+          .flatMap((b) => (b.id === z.id ? [left, right] : [b]))
+          .sort((a, b) => a.startSec - b.startSec),
+      });
+      setSelectedId(left.id);
+    }
   };
+
+  // Delete the selected clip. Won't remove the last remaining video segment.
+  const deleteSelected = () => {
+    if (!project || !selectedId) return;
+    if (project.zooms.some((z) => z.id === selectedId)) {
+      setProject({ ...project, zooms: project.zooms.filter((z) => z.id !== selectedId) });
+      setSelectedId(null);
+    } else if (
+      project.segments.some((s) => s.id === selectedId) &&
+      project.segments.length > 1
+    ) {
+      setProject({ ...project, segments: project.segments.filter((s) => s.id !== selectedId) });
+      setSelectedId(null);
+    }
+  };
+
+  const trimSegment = (id: string, startSec: number, endSec: number) =>
+    setProject((p) => {
+      if (!p) return p;
+      const segs = [...p.segments].sort((a, b) => a.startSec - b.startSec);
+      const i = segs.findIndex((s) => s.id === id);
+      if (i < 0) return p;
+      const lo = i > 0 ? segs[i - 1].endSec : 0;
+      const hi = i < segs.length - 1 ? segs[i + 1].startSec : p.sourceDurationSec;
+      segs[i] = {
+        ...segs[i],
+        startSec: clamp(startSec, lo, endSec - MIN_LEN),
+        endSec: clamp(endSec, startSec + MIN_LEN, hi),
+      };
+      return { ...p, segments: segs };
+    });
 
   const setVolumeDb = (db: number) =>
     setProject((p) => (p ? { ...p, audio: { ...p.audio, volumeDb: db } } : p));
@@ -258,7 +315,7 @@ export function Studio() {
       setExportError("Export failed. Try a shorter clip or a different browser.");
     } finally {
       setExporting(false);
-      v.currentTime = project.trim.startSec;
+      v.currentTime = project.segments[0].startSec;
     }
   };
 
@@ -288,39 +345,43 @@ export function Studio() {
     cap.reset();
   };
 
-  const selected = project?.zooms.find((z) => z.id === selectedId) ?? null;
+  const selectedZoom = project?.zooms.find((z) => z.id === selectedId) ?? null;
+  const selectedSegment = project?.segments.find((s) => s.id === selectedId) ?? null;
+  const selectedClip = selectedZoom ?? selectedSegment;
   const canSplit =
-    !!selected &&
-    currentTime > selected.startSec + MIN_LEN &&
-    currentTime < selected.endSec - MIN_LEN;
-  const splitTitle = selected
+    !!selectedClip &&
+    currentTime > selectedClip.startSec + MIN_LEN &&
+    currentTime < selectedClip.endSec - MIN_LEN;
+  const canDelete =
+    !!selectedZoom || (!!selectedSegment && (project?.segments.length ?? 0) > 1);
+  const splitTitle = selectedClip
     ? canSplit
-      ? "Split zoom at playhead"
-      : "Move the playhead inside the selected zoom to split"
-    : "Select a zoom block to split";
+      ? "Split at playhead"
+      : "Move the playhead inside the selected clip to split"
+    : "Select a clip to split";
 
   const zoomPanel = (
     <div className="panel">
       <button className="btn btn--primary panel__add" onClick={addZoom} disabled={!editing}>
         + Add zoom at playhead
       </button>
-      {selected ? (
+      {selectedZoom ? (
         <div className="panel__zoom">
           <div className="panel__zoom-head">
             <strong>Selected zoom</strong>
-            <button className="btn btn--danger btn--sm" onClick={() => deleteZoom(selected.id)}>
+            <button className="btn btn--danger btn--sm" onClick={() => deleteZoom(selectedZoom.id)}>
               Delete
             </button>
           </div>
           <label className="field">
-            Zoom <span>{selected.scale.toFixed(1)}x</span>
-            <input type="range" min={1} max={3} step={0.1} value={selected.scale}
-              onChange={(e) => updateZoom(selected.id, { scale: Number(e.target.value) })} />
+            Zoom <span>{selectedZoom.scale.toFixed(1)}x</span>
+            <input type="range" min={1} max={3} step={0.1} value={selectedZoom.scale}
+              onChange={(e) => updateZoom(selectedZoom.id, { scale: Number(e.target.value) })} />
           </label>
           <label className="field">
-            Ease <span>{selected.easeSec.toFixed(1)}s</span>
-            <input type="range" min={0} max={1.5} step={0.1} value={selected.easeSec}
-              onChange={(e) => updateZoom(selected.id, { easeSec: Number(e.target.value) })} />
+            Ease <span>{selectedZoom.easeSec.toFixed(1)}s</span>
+            <input type="range" min={0} max={1.5} step={0.1} value={selectedZoom.easeSec}
+              onChange={(e) => updateZoom(selectedZoom.id, { easeSec: Number(e.target.value) })} />
           </label>
           <p className="hint">Pause and click the preview to set the focus point.</p>
         </div>
@@ -411,7 +472,7 @@ export function Studio() {
                   autoPlay
                   muted
                   playsInline
-                  className="stage__pip"
+                  className={`stage__pip stage__pip--${cap.settings.cameraShape}`}
                   ref={(el) => {
                     if (el && el.srcObject !== cap.cameraStream) el.srcObject = cap.cameraStream;
                   }}
@@ -456,15 +517,15 @@ export function Studio() {
             onTogglePlay={togglePlay}
             canSplit={canSplit}
             splitTitle={splitTitle}
-            onSplit={splitSelectedZoom}
+            onSplit={splitSelected}
             zoomLevel={zoomLevel}
             onZoomOut={() => setZoomLevel((z) => Math.max(0.25, z / 1.25))}
             onZoomIn={() => setZoomLevel((z) => Math.min(4, z * 1.25))}
             onResetZoom={() => setZoomLevel(1)}
             volumeDb={project?.audio.volumeDb ?? 0}
             onVolume={setVolumeDb}
-            canDelete={!!selectedId}
-            onDelete={() => selectedId && deleteZoom(selectedId)}
+            canDelete={canDelete}
+            onDelete={deleteSelected}
           />
         ) : (
           <div className="bar">
@@ -477,28 +538,28 @@ export function Studio() {
             duration={duration}
             pixelsPerSec={pixelsPerSec}
             currentTime={currentTime}
-            trim={project.trim}
+            segments={project.segments}
             zooms={project.zooms}
             selectedId={selectedId}
             hasVideo={editing}
             onSeek={seek}
-            onTrim={(trim) => setProject({ ...project, trim })}
-            onSelectZoom={setSelectedId}
+            onSelect={setSelectedId}
             onMoveZoom={(id, startSec, endSec) => updateZoom(id, { startSec, endSec })}
+            onTrimSegment={trimSegment}
           />
         ) : (
           <Tracks
             duration={1}
             pixelsPerSec={pixelsPerSec}
             currentTime={0}
-            trim={{ startSec: 0, endSec: 1 }}
+            segments={[]}
             zooms={[]}
             selectedId={null}
             hasVideo={false}
             onSeek={() => {}}
-            onTrim={() => {}}
-            onSelectZoom={() => {}}
+            onSelect={() => {}}
             onMoveZoom={() => {}}
+            onTrimSegment={() => {}}
           />
         )}
       </div>
@@ -517,22 +578,34 @@ function RecordControls({
   if (phase === "idle") {
     return (
       <>
-        <label className="toggle">
-          <input
-            type="checkbox"
-            checked={settings.mic}
-            onChange={(e) => setSettings((s) => ({ ...s, mic: e.target.checked }))}
-          />
+        <button
+          className={`toggle-btn${settings.mic ? " is-on" : ""}`}
+          aria-pressed={settings.mic}
+          onClick={() => setSettings((s) => ({ ...s, mic: !s.mic }))}
+        >
           Microphone
-        </label>
-        <label className="toggle">
-          <input
-            type="checkbox"
-            checked={settings.camera}
-            onChange={(e) => setSettings((s) => ({ ...s, camera: e.target.checked }))}
-          />
+        </button>
+        <button
+          className={`toggle-btn${settings.camera ? " is-on" : ""}`}
+          aria-pressed={settings.camera}
+          onClick={() => setSettings((s) => ({ ...s, camera: !s.camera }))}
+        >
           Camera
-        </label>
+        </button>
+        {settings.camera && (
+          <div className="segmented" role="group" aria-label="Camera shape">
+            {(["rounded", "circle", "square"] as const).map((sh) => (
+              <button
+                key={sh}
+                className={`segmented__btn${settings.cameraShape === sh ? " is-active" : ""}`}
+                onClick={() => setSettings((s) => ({ ...s, cameraShape: sh }))}
+                aria-pressed={settings.cameraShape === sh}
+              >
+                {sh[0].toUpperCase() + sh.slice(1)}
+              </button>
+            ))}
+          </div>
+        )}
         <button className="btn btn--primary" onClick={cap.setup} disabled={!cap.supported}>
           Set up recording
         </button>
@@ -542,8 +615,8 @@ function RecordControls({
   if (phase === "ready") {
     return (
       <>
-        <span className="bar__hint">Ready — press start when you are.</span>
-        <button className="btn btn--rec" onClick={onStart}>Start (3·2·1)</button>
+        <span className="bar__hint">Ready when you are.</span>
+        <button className="btn btn--rec" onClick={onStart}>Start recording</button>
         <button className="btn" onClick={cap.cancel}>Cancel</button>
       </>
     );
@@ -551,7 +624,7 @@ function RecordControls({
   if (phase === "countdown") {
     return (
       <>
-        <span className="bar__hint">Starting in {cap.countdown}…</span>
+        <button className="btn btn--rec" disabled>Starting in {cap.countdown}…</button>
         <button className="btn" onClick={cap.cancel}>Cancel</button>
       </>
     );

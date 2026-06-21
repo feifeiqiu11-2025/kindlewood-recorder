@@ -81,11 +81,13 @@ export async function exportVideo({
     if (e.data.size > 0) chunks.push(e.data);
   };
 
-  const start = project.trim.startSec;
-  const end = project.trim.endSec;
+  const segments = project.segments;
+  const totalKept = segments.reduce((s, g) => s + (g.endSec - g.startSec), 0);
   const wasMuted = video.muted;
+  let segIndex = 0;
+  let doneKept = 0; // kept seconds completed in prior segments (for progress)
 
-  await seekTo(video, start);
+  await seekTo(video, segments[0].startSec);
 
   return new Promise<Blob>((resolve, reject) => {
     let raf = 0;
@@ -99,7 +101,23 @@ export async function exportVideo({
     recorder.onerror = () => reject(new Error("Recording failed during export."));
 
     const tick = () => {
+      const seg = segments[segIndex];
       const t = video.currentTime;
+
+      // Advance across segment boundaries (skipping deleted gaps).
+      if (t >= seg.endSec - 0.001) {
+        doneKept += seg.endSec - seg.startSec;
+        segIndex += 1;
+        if (segIndex >= segments.length) {
+          recorder.stop();
+          return;
+        }
+        void seekTo(video, segments[segIndex].startSec).then(() => {
+          raf = requestAnimationFrame(tick);
+        });
+        return;
+      }
+
       if (output) {
         // Letterbox the zoom-cropped frame into the fixed output ratio.
         const z = zoomAt(project, t);
@@ -123,12 +141,9 @@ export async function exportVideo({
       } else {
         drawFrame(ctx, video, zoomAt(project, t));
       }
-      onProgress?.(clamp((t - start) / Math.max(0.001, end - start), 0, 1));
+      const progressed = doneKept + (t - seg.startSec);
+      onProgress?.(clamp(progressed / Math.max(0.001, totalKept), 0, 1));
 
-      if (t >= end || video.ended) {
-        recorder.stop();
-        return;
-      }
       raf = requestAnimationFrame(tick);
     };
 

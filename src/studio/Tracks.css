@@ -105,28 +105,30 @@
   position: absolute;
   top: 8px;
   bottom: 8px;
+  display: flex;
+  justify-content: space-between;
   background: linear-gradient(180deg, #6d4dff, #5b3df5);
+  border: 1px solid transparent;
   border-radius: 6px;
+  overflow: hidden;
+  cursor: pointer;
 }
 
-.tracks__dim {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  background: rgba(255, 255, 255, 0.6);
-  pointer-events: none;
+.tracks__clip.is-selected {
+  border-color: #c3b3ff;
+  box-shadow: 0 0 0 2px rgba(195, 179, 255, 0.6);
 }
 
-.tracks__trim {
-  position: absolute;
-  top: 4px;
-  bottom: 4px;
-  width: 10px;
-  margin-left: -5px;
-  background: #f5c542;
-  border-radius: 4px;
+.tracks__clip-edge {
+  width: 9px;
+  align-self: stretch;
+  flex: 0 0 auto;
   cursor: ew-resize;
-  z-index: 4;
+  background: rgba(255, 255, 255, 0.28);
+}
+
+.tracks__clip-edge--r {
+  margin-left: auto;
 }
 
 .tracks__zoom {

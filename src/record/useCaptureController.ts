@@ -9,7 +9,12 @@ export type CapturePhase =
   | "paused"
   | "stopped";
 
-export type CaptureSettings = { mic: boolean; camera: boolean };
+export type CameraShape = "rounded" | "circle" | "square";
+export type CaptureSettings = {
+  mic: boolean;
+  camera: boolean;
+  cameraShape: CameraShape;
+};
 
 export type Recording = {
   blob: Blob;
@@ -59,6 +64,7 @@ export function useCaptureController() {
   const [settings, setSettings] = useState<CaptureSettings>({
     mic: true,
     camera: false,
+    cameraShape: "rounded",
   });
   const [recording, setRecording] = useState<Recording | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -185,23 +191,45 @@ export function useCaptureController() {
       void cv.play();
       compVideosRef.current = [dv, cv];
 
+      const shape = settings.cameraShape;
+      const clipPath = (ctx2: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) => {
+        if (shape === "circle") {
+          ctx2.beginPath();
+          ctx2.arc(x + w / 2, y + h / 2, Math.min(w, h) / 2, 0, Math.PI * 2);
+        } else if (shape === "square") {
+          ctx2.beginPath();
+          ctx2.rect(x, y, w, h);
+        } else {
+          roundRectPath(ctx2, x, y, w, h, Math.min(w, h) * 0.12);
+        }
+      };
+
       const draw = () => {
         if (dv.videoWidth) ctx.drawImage(dv, 0, 0, W, H);
         if (cv.videoWidth) {
+          const square = shape === "circle" || shape === "square";
           const cw = W * PIP_WIDTH_PCT;
-          const ch = cw * (cv.videoHeight / cv.videoWidth || 0.75);
+          const ch = square ? cw : cw * (cv.videoHeight / cv.videoWidth || 0.75);
           const m = W * PIP_MARGIN_PCT;
           const x = W - cw - m;
           const y = H - ch - m;
-          const r = Math.min(cw, ch) * 0.12;
+          // Cover-crop the camera into a square for circle/square shapes.
+          let sx = 0, sy = 0, sw = cv.videoWidth, sh = cv.videoHeight;
+          if (square) {
+            const side = Math.min(cv.videoWidth, cv.videoHeight);
+            sx = (cv.videoWidth - side) / 2;
+            sy = (cv.videoHeight - side) / 2;
+            sw = side;
+            sh = side;
+          }
           ctx.save();
-          roundRectPath(ctx, x, y, cw, ch, r);
+          clipPath(ctx, x, y, cw, ch);
           ctx.clip();
-          ctx.drawImage(cv, x, y, cw, ch);
+          ctx.drawImage(cv, sx, sy, sw, sh, x, y, cw, ch);
           ctx.restore();
           ctx.lineWidth = Math.max(2, W * 0.002);
           ctx.strokeStyle = "rgba(255,255,255,0.9)";
-          roundRectPath(ctx, x, y, cw, ch, r);
+          clipPath(ctx, x, y, cw, ch);
           ctx.stroke();
         }
         compRafRef.current = requestAnimationFrame(draw);
@@ -230,7 +258,7 @@ export function useCaptureController() {
     startTick();
     recorder.start(1000);
     setPhase("recording");
-  }, [settings.camera, finalize, startTick, cleanupStreams]);
+  }, [settings.camera, settings.cameraShape, finalize, startTick, cleanupStreams]);
 
   const stopOrCancelRef = useRef<() => void>(() => {});
 

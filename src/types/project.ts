@@ -31,15 +31,22 @@ export const ZoomBlockSchema = z.object({
 
 export type ZoomBlock = z.infer<typeof ZoomBlockSchema>;
 
+/** A kept slice of the source recording. The final video is the segments
+ *  played in order; gaps between them (deleted ranges) are dropped. */
+export const SegmentSchema = z.object({
+  id: z.string(),
+  startSec: z.number().min(0),
+  endSec: z.number().min(0),
+});
+
+export type Segment = z.infer<typeof SegmentSchema>;
+
 export const VideoProjectSchema = z.object({
   version: z.literal(1),
   /** Duration of the raw source recording, in seconds. */
   sourceDurationSec: z.number().min(0),
-  /** Trim window applied to the source. */
-  trim: z.object({
-    startSec: z.number().min(0),
-    endSec: z.number().min(0),
-  }),
+  /** Kept segments of the source, in source-time order. */
+  segments: z.array(SegmentSchema).min(1),
   /** Manual zoom blocks, in timeline order. */
   zooms: z.array(ZoomBlockSchema).default([]),
   /** Audio settings. In v1 the mic track is baked into the recording. */
@@ -52,13 +59,18 @@ export const VideoProjectSchema = z.object({
 
 export type VideoProject = z.infer<typeof VideoProjectSchema>;
 
-/** A fresh project covering the full untrimmed source with no zooms. */
+/** A fresh project: one segment covering the whole source, no zooms. */
 export function emptyProject(sourceDurationSec: number): VideoProject {
   return {
     version: 1,
     sourceDurationSec,
-    trim: { startSec: 0, endSec: sourceDurationSec },
+    segments: [{ id: crypto.randomUUID(), startSec: 0, endSec: sourceDurationSec }],
     zooms: [],
     audio: { muted: false, volumeDb: 0 },
   };
+}
+
+/** Total kept duration across all segments. */
+export function keptDuration(p: VideoProject): number {
+  return p.segments.reduce((sum, s) => sum + (s.endSec - s.startSec), 0);
 }
