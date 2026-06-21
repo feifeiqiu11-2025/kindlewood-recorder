@@ -22,6 +22,8 @@ export type ExportOptions = {
   project: VideoProject;
   mimeType: string;
   fps?: number;
+  /** Cap output width to bound memory on very large screen captures. */
+  maxWidth?: number;
   onProgress?: (fraction: number) => void;
 };
 
@@ -38,14 +40,16 @@ export async function exportVideo({
   project,
   mimeType,
   fps = 30,
+  maxWidth = 1920,
   onProgress,
 }: ExportOptions): Promise<Blob> {
   const vw = video.videoWidth;
   const vh = video.videoHeight;
+  const scale = Math.min(1, maxWidth / Math.max(1, vw));
 
   const canvas = document.createElement("canvas");
-  canvas.width = vw;
-  canvas.height = vh;
+  canvas.width = Math.round(vw * scale);
+  canvas.height = Math.round(vh * scale);
   const ctx = canvas.getContext("2d");
   if (!ctx) throw new Error("Could not get a 2D canvas context for export.");
 

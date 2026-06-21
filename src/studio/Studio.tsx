@@ -7,8 +7,11 @@ import { zoomAt } from "../render/zoom";
 import { exportVideo } from "../render/exportVideo";
 import { LeftRail, type RailTab } from "./LeftRail";
 import { Tracks } from "./Tracks";
+import { FloatingControls } from "./FloatingControls";
 import { SoundsIcon, MusicIcon, ZoomIcon } from "./icons";
 import "./Studio.css";
+
+const MAX_PREVIEW_WIDTH = 1600;
 
 const clamp = (v: number, lo: number, hi: number) =>
   Math.max(lo, Math.min(hi, v));
@@ -39,8 +42,6 @@ export function Studio() {
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const liveVideoRef = useRef<HTMLVideoElement>(null);
-  const liveCamRef = useRef<HTMLVideoElement>(null);
   const projectRef = useRef<VideoProject | null>(null);
   const selectedRef = useRef<string | null>(null);
 
@@ -53,6 +54,7 @@ export function Studio() {
   const [exporting, setExporting] = useState(false);
   const [exportPct, setExportPct] = useState(0);
   const [exportError, setExportError] = useState<string | null>(null);
+  const [pipWindow, setPipWindow] = useState<Window | null>(null);
 
   const editing = !!cap.recording;
 
@@ -63,13 +65,14 @@ export function Studio() {
     selectedRef.current = selectedId;
   }, [selectedId]);
 
-  // Live preview wiring for the record stage.
+  // Close the floating PiP window when recording ends.
   useEffect(() => {
-    if (liveVideoRef.current) liveVideoRef.current.srcObject = cap.displayStream;
-  }, [cap.displayStream]);
-  useEffect(() => {
-    if (liveCamRef.current) liveCamRef.current.srcObject = cap.cameraStream;
-  }, [cap.cameraStream]);
+    if ((cap.phase === "stopped" || cap.phase === "idle") && pipWindow) {
+      pipWindow.close();
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- detach from the now-closed external window
+      setPipWindow(null);
+    }
+  }, [cap.phase, pipWindow]);
 
   // When a recording lands, load it into the editor.
   // MediaRecorder WebM blobs report duration = Infinity (no duration in the
@@ -105,9 +108,12 @@ export function Studio() {
       if (v && c && p && v.videoWidth) {
         const ctx = c.getContext("2d");
         if (ctx) {
-          if (c.width !== v.videoWidth) {
-            c.width = v.videoWidth;
-            c.height = v.videoHeight;
+          const sc = Math.min(1, MAX_PREVIEW_WIDTH / v.videoWidth);
+          const cw = Math.round(v.videoWidth * sc);
+          const ch = Math.round(v.videoHeight * sc);
+          if (c.width !== cw) {
+            c.width = cw;
+            c.height = ch;
           }
           const editFocus = !!selectedRef.current && v.paused;
           if (editFocus) {
@@ -219,6 +225,28 @@ export function Studio() {
     }
   };
 
+  // Opened from the Start click (a user gesture, required by the DPiP API),
+  // then the countdown + recording begin.
+  const startRecording = async () => {
+    const dpip = (window as unknown as { documentPictureInPicture?: { requestWindow: (o: { width: number; height: number }) => Promise<Window> } }).documentPictureInPicture;
+    if (dpip?.requestWindow) {
+      try {
+        const w = await dpip.requestWindow({ width: 300, height: 92 });
+        w.document.body.style.margin = "0";
+        w.document.body.style.display = "flex";
+        w.document.body.style.alignItems = "center";
+        w.document.body.style.justifyContent = "center";
+        w.document.body.style.background = "#16161f";
+        w.document.title = "Recording";
+        w.addEventListener("pagehide", () => setPipWindow(null));
+        setPipWindow(w);
+      } catch {
+        // DPiP denied/unsupported — the in-page floating bar covers it.
+      }
+    }
+    cap.arm();
+  };
+
   const newRecording = () => {
     setProject(null);
     setDuration(0);
@@ -311,34 +339,74 @@ export function Studio() {
         <div className="stage">
           {editing ? (
             <canvas ref={canvasRef} className="stage__canvas" onPointerDown={onCanvasPointerDown} />
-          ) : (
+          ) : cap.phase === "recording" || cap.phase === "paused" ? (
+            // No live mirror while recording — showing the captured surface here
+            // creates a feedback loop (and can crash the tab) when the user
+            // records this very tab. Controls live in the floating window.
+            <div className="stage__recstate">
+              <div className={`stage__rec${cap.phase === "paused" ? " stage__rec--paused" : ""}`}>
+                {cap.phase === "paused" ? "❚❚ Paused" : "● REC"}
+              </div>
+              <p>
+                Recording your screen. Use the floating controls
+                {pipWindow ? " window" : " at the top"} to pause or stop.
+              </p>
+              {cap.cameraStream && (
+                <video
+                  autoPlay
+                  muted
+                  playsInline
+                  className="stage__pip stage__pip--center"
+                  ref={(el) => {
+                    if (el && el.srcObject !== cap.cameraStream) el.srcObject = cap.cameraStream;
+                  }}
+                />
+              )}
+            </div>
+          ) : cap.displayStream ? (
             <div className="stage__live">
-              {cap.displayStream ? (
-                <>
-                  <video ref={liveVideoRef} autoPlay muted playsInline className="stage__canvas" />
-                  <video
-                    ref={liveCamRef}
-                    autoPlay
-                    muted
-                    playsInline
-                    className={`stage__pip${cap.cameraStream ? "" : " is-hidden"}`}
-                  />
-                </>
-              ) : (
-                <div className="stage__placeholder">
-                  <p>Set up a recording to begin.</p>
-                </div>
+              <video
+                autoPlay
+                muted
+                playsInline
+                className="stage__canvas"
+                ref={(el) => {
+                  if (el && el.srcObject !== cap.displayStream) el.srcObject = cap.displayStream;
+                }}
+              />
+              {cap.cameraStream && (
+                <video
+                  autoPlay
+                  muted
+                  playsInline
+                  className="stage__pip"
+                  ref={(el) => {
+                    if (el && el.srcObject !== cap.cameraStream) el.srcObject = cap.cameraStream;
+                  }}
+                />
               )}
               {cap.phase === "countdown" && (
                 <div className="stage__countdown" aria-live="assertive">
                   {cap.countdown}
                 </div>
               )}
-              {cap.phase === "recording" && <div className="stage__rec">● REC</div>}
-              {cap.phase === "paused" && <div className="stage__rec stage__rec--paused">❚❚ Paused</div>}
+            </div>
+          ) : (
+            <div className="stage__placeholder">
+              <p>Set up a recording to begin.</p>
             </div>
           )}
         </div>
+
+        <FloatingControls
+          target={pipWindow}
+          phase={cap.phase}
+          countdown={cap.countdown}
+          elapsedSec={cap.elapsedSec}
+          onPause={cap.pause}
+          onResume={cap.resume}
+          onStop={cap.stop}
+        />
 
         {/* Transport / record bar */}
         <div className="bar">
@@ -351,7 +419,7 @@ export function Studio() {
               <button className="btn" onClick={addZoom}>+ Add zoom</button>
             </>
           ) : (
-            <RecordControls cap={cap} />
+            <RecordControls cap={cap} onStart={startRecording} />
           )}
         </div>
 
@@ -387,7 +455,13 @@ export function Studio() {
   );
 }
 
-function RecordControls({ cap }: { cap: ReturnType<typeof useCaptureController> }) {
+function RecordControls({
+  cap,
+  onStart,
+}: {
+  cap: ReturnType<typeof useCaptureController>;
+  onStart: () => void;
+}) {
   const { phase, settings, setSettings } = cap;
   if (phase === "idle") {
     return (
@@ -418,7 +492,7 @@ function RecordControls({ cap }: { cap: ReturnType<typeof useCaptureController> 
     return (
       <>
         <span className="bar__hint">Ready — press start when you are.</span>
-        <button className="btn btn--rec" onClick={cap.arm}>Start (3·2·1)</button>
+        <button className="btn btn--rec" onClick={onStart}>Start (3·2·1)</button>
         <button className="btn" onClick={cap.cancel}>Cancel</button>
       </>
     );
