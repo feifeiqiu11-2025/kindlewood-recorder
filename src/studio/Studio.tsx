@@ -335,32 +335,9 @@ export function Studio() {
         <div className="stage">
           {editing ? (
             <canvas ref={canvasRef} className="stage__canvas" onPointerDown={onCanvasPointerDown} />
-          ) : cap.phase === "recording" || cap.phase === "paused" ? (
-            // No live mirror while recording — showing the captured surface here
-            // creates a feedback loop (and can crash the tab) when the user
-            // records this very tab. Controls live in the floating window.
-            <div className="stage__recstate">
-              <div className={`stage__rec${cap.phase === "paused" ? " stage__rec--paused" : ""}`}>
-                {cap.phase === "paused" ? "❚❚ Paused" : "● REC"}
-              </div>
-              <p>
-                Recording your screen. Use the floating controls
-                {pipWindow ? " window" : " at the top"} to pause or stop.
-              </p>
-              {cap.cameraStream && (
-                <video
-                  autoPlay
-                  muted
-                  playsInline
-                  className="stage__pip stage__pip--center"
-                  ref={(el) => {
-                    if (el && el.srcObject !== cap.cameraStream) el.srcObject = cap.cameraStream;
-                  }}
-                />
-              )}
-            </div>
           ) : cap.displayStream ? (
             <div className="stage__live">
+              {/* Live mirror of the captured surface — confirms what's recorded. */}
               <video
                 autoPlay
                 muted
@@ -385,6 +362,10 @@ export function Studio() {
                 <div className="stage__countdown" aria-live="assertive">
                   {cap.countdown}
                 </div>
+              )}
+              {cap.phase === "recording" && <div className="stage__rec">● REC</div>}
+              {cap.phase === "paused" && (
+                <div className="stage__rec stage__rec--paused">❚❚ Paused</div>
               )}
             </div>
           ) : (

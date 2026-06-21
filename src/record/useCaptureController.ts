@@ -67,6 +67,7 @@ export function useCaptureController() {
   const [displayStream, setDisplayStream] = useState<MediaStream | null>(null);
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
 
+  const phaseRef = useRef<CapturePhase>("idle");
   const displayRef = useRef<MediaStream | null>(null);
   const micRef = useRef<MediaStream | null>(null);
   const cameraRef = useRef<MediaStream | null>(null);
@@ -97,6 +98,10 @@ export function useCaptureController() {
       );
     }, 200);
   }, [stopTick]);
+
+  useEffect(() => {
+    phaseRef.current = phase;
+  }, [phase]);
 
   const cleanupStreams = useCallback(() => {
     for (const r of [displayRef, micRef, cameraRef]) {
@@ -130,6 +135,8 @@ export function useCaptureController() {
   }, [cleanupStreams, stopTick]);
 
   const beginRecording = useCallback(() => {
+    // Idempotency guard: never start a second recorder over a live one.
+    if (recorderRef.current && recorderRef.current.state !== "inactive") return;
     const mimeType = pickSupportedMimeType();
     const display = displayRef.current;
     const hasLiveVideo =
@@ -272,23 +279,25 @@ export function useCaptureController() {
   }, [settings]);
 
   const arm = useCallback(() => {
-    setPhase((p) => {
-      if (p !== "ready") return p;
-      setCountdown(COUNTDOWN_FROM);
-      let n = COUNTDOWN_FROM;
-      cdRef.current = setInterval(() => {
-        n -= 1;
-        if (n <= 0) {
-          if (cdRef.current) clearInterval(cdRef.current);
-          cdRef.current = null;
-          setCountdown(0);
-          beginRecording();
-        } else {
-          setCountdown(n);
-        }
-      }, 1000);
-      return "countdown";
-    });
+    // No side effects inside a setState updater — StrictMode double-invokes
+    // updaters and would spawn two countdown timers (→ two recorders).
+    if (phaseRef.current !== "ready") return;
+    if (cdRef.current) clearInterval(cdRef.current);
+    setError(null);
+    setPhase("countdown");
+    setCountdown(COUNTDOWN_FROM);
+    let n = COUNTDOWN_FROM;
+    cdRef.current = setInterval(() => {
+      n -= 1;
+      if (n <= 0) {
+        if (cdRef.current) clearInterval(cdRef.current);
+        cdRef.current = null;
+        setCountdown(0);
+        beginRecording();
+      } else {
+        setCountdown(n);
+      }
+    }, 1000);
   }, [beginRecording]);
 
   const pause = useCallback(() => {
