@@ -1,7 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 import { useCaptureController } from "../record/useCaptureController";
 import { downloadBlob, extensionForMimeType } from "../record/recording";
-import { emptyProject, type VideoProject } from "../types/project";
+import {
+  emptyProject,
+  keptDuration,
+  segmentAtSource,
+  sourceToTimeline,
+  timelineToSource,
+  segmentTimelineStart,
+  type VideoProject,
+} from "../types/project";
 import { drawFrame } from "../render/renderFrame";
 import { zoomAt } from "../render/zoom";
 import { exportVideo } from "../render/exportVideo";
@@ -35,9 +43,9 @@ export function Studio() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const projectRef = useRef<VideoProject | null>(null);
   const selectedRef = useRef<string | null>(null);
+  const exportingRef = useRef(false);
 
   const [project, setProject] = useState<VideoProject | null>(null);
-  const [duration, setDuration] = useState(0);
   const [videoAspect, setVideoAspect] = useState(16 / 9);
   const [currentTime, setCurrentTime] = useState(0);
   const [playing, setPlaying] = useState(false);
@@ -84,7 +92,6 @@ export function Studio() {
       const d =
         isFinite(v.duration) && v.duration > 0 ? v.duration : rec.durationSec;
       const safe = Math.max(0.1, d);
-      setDuration(safe);
       setProject(emptyProject(safe));
       setCurrentTime(0);
       if (v.videoWidth && v.videoHeight) setVideoAspect(v.videoWidth / v.videoHeight);
@@ -98,6 +105,11 @@ export function Studio() {
   useEffect(() => {
     let raf = 0;
     const loop = () => {
+      // During export the exporter drives the same <video>; don't fight it.
+      if (exportingRef.current) {
+        raf = requestAnimationFrame(loop);
+        return;
+      }
       const v = videoRef.current;
       const c = canvasRef.current;
       const p = projectRef.current;
@@ -111,25 +123,36 @@ export function Studio() {
             c.width = cw;
             c.height = ch;
           }
+          // Timeline (output) time for this source position.
+          const tlTime = sourceToTimeline(p, v.currentTime);
           // While a zoom block is selected and paused, show the full frame so
           // the target box (HTML overlay) can be placed against real content.
           const editingZoom = p.zooms.some((b) => b.id === selectedRef.current);
           if (editingZoom && v.paused) {
             drawFrame(ctx, v, { scale: 1, focusX: 0.5, focusY: 0.5 });
           } else {
-            drawFrame(ctx, v, zoomAt(p, v.currentTime));
+            drawFrame(ctx, v, zoomAt(p, tlTime));
           }
+          setCurrentTime(tlTime);
         }
-        setCurrentTime(v.currentTime);
         if (!v.paused) {
-          // Skip deleted gaps: jump to the next kept segment, stop at the end.
-          const t = v.currentTime;
-          const seg = p.segments.find((s) => t < s.endSec - 1e-3);
-          if (!seg) {
-            v.pause();
-            setPlaying(false);
-          } else if (t < seg.startSec) {
-            v.currentTime = seg.startSec;
+          // Ripple playback: at a segment's end, jump to the next segment's
+          // source start (skipping deleted gaps); stop after the last one.
+          const at = segmentAtSource(p, v.currentTime);
+          if (!at) {
+            const next = p.segments.find((s) => s.sourceStart > v.currentTime - 1e-6);
+            if (next) v.currentTime = next.sourceStart;
+            else {
+              v.pause();
+              setPlaying(false);
+            }
+          } else if (v.currentTime >= at.seg.sourceEnd - 1e-3) {
+            const nextIdx = at.index + 1;
+            if (nextIdx < p.segments.length) v.currentTime = p.segments[nextIdx].sourceStart;
+            else {
+              v.pause();
+              setPlaying(false);
+            }
           }
         }
       }
@@ -139,11 +162,14 @@ export function Studio() {
     return () => cancelAnimationFrame(raf);
   }, []);
 
+  // `t` is TIMELINE time; map it to the source position for the media element.
   const seek = (t: number) => {
     const v = videoRef.current;
-    if (!v) return;
-    v.currentTime = clamp(t, 0, duration);
-    setCurrentTime(v.currentTime);
+    const p = projectRef.current;
+    if (!v || !p) return;
+    const tl = clamp(t, 0, keptDuration(p));
+    v.currentTime = timelineToSource(p, tl).sourceTime;
+    setCurrentTime(tl);
   };
 
   const togglePlay = () => {
@@ -151,10 +177,9 @@ export function Studio() {
     const p = projectRef.current;
     if (!v || !p) return;
     if (v.paused) {
-      const first = p.segments[0].startSec;
-      const last = p.segments[p.segments.length - 1].endSec;
-      if (v.currentTime < first || v.currentTime >= last) {
-        v.currentTime = first;
+      const total = keptDuration(p);
+      if (sourceToTimeline(p, v.currentTime) >= total - 0.05) {
+        v.currentTime = timelineToSource(p, 0).sourceTime;
       }
       void v.play();
       setPlaying(true);
@@ -171,10 +196,9 @@ export function Studio() {
 
   const addZoom = () => {
     if (!project) return;
-    const first = project.segments[0].startSec;
-    const last = project.segments[project.segments.length - 1].endSec;
-    const start = clamp(currentTime, first, last - MIN_LEN);
-    const end = Math.min(start + DEFAULT_ZOOM_LEN, last);
+    const total = keptDuration(project);
+    const start = clamp(currentTime, 0, total - MIN_LEN);
+    const end = Math.min(start + DEFAULT_ZOOM_LEN, total);
     const id = crypto.randomUUID();
     setProject({
       ...project,
@@ -197,17 +221,20 @@ export function Studio() {
   // Split the selected clip (video segment or zoom block) at the playhead.
   const splitSelected = () => {
     if (!project || !selectedId) return;
-    const t = currentTime;
+    const t = currentTime; // timeline time
     const seg = project.segments.find((s) => s.id === selectedId);
     if (seg) {
-      if (t <= seg.startSec + MIN_LEN || t >= seg.endSec - MIN_LEN) return;
-      const left = { ...seg, endSec: t };
-      const right = { ...seg, id: crypto.randomUUID(), startSec: t };
+      const segTl = segmentTimelineStart(project, seg.id);
+      const dur = seg.sourceEnd - seg.sourceStart;
+      if (t <= segTl + MIN_LEN || t >= segTl + dur - MIN_LEN) return;
+      const srcMid = seg.sourceStart + (t - segTl);
+      const left = { ...seg, sourceEnd: srcMid };
+      const right = { ...seg, id: crypto.randomUUID(), sourceStart: srcMid };
       setProject({
         ...project,
         segments: project.segments
           .flatMap((s) => (s.id === seg.id ? [left, right] : [s]))
-          .sort((a, b) => a.startSec - b.startSec),
+          .sort((a, b) => a.sourceStart - b.sourceStart),
       });
       setSelectedId(left.id);
       return;
@@ -242,19 +269,18 @@ export function Studio() {
     }
   };
 
-  const trimSegment = (id: string, startSec: number, endSec: number) =>
+  // Trim a segment's SOURCE range (Tracks passes desired source bounds).
+  const trimSegment = (id: string, sourceStart: number, sourceEnd: number) =>
     setProject((p) => {
       if (!p) return p;
-      const segs = [...p.segments].sort((a, b) => a.startSec - b.startSec);
+      const segs = [...p.segments].sort((a, b) => a.sourceStart - b.sourceStart);
       const i = segs.findIndex((s) => s.id === id);
       if (i < 0) return p;
-      const lo = i > 0 ? segs[i - 1].endSec : 0;
-      const hi = i < segs.length - 1 ? segs[i + 1].startSec : p.sourceDurationSec;
-      segs[i] = {
-        ...segs[i],
-        startSec: clamp(startSec, lo, endSec - MIN_LEN),
-        endSec: clamp(endSec, startSec + MIN_LEN, hi),
-      };
+      const lo = i > 0 ? segs[i - 1].sourceEnd : 0;
+      const hi = i < segs.length - 1 ? segs[i + 1].sourceStart : p.sourceDurationSec;
+      const ss = clamp(sourceStart, lo, sourceEnd - MIN_LEN);
+      const se = clamp(sourceEnd, ss + MIN_LEN, hi);
+      segs[i] = { ...segs[i], sourceStart: ss, sourceEnd: se };
       return { ...p, segments: segs };
     });
 
@@ -287,6 +313,7 @@ export function Studio() {
     setExportError(null);
     setExporting(true);
     setExportPct(0);
+    exportingRef.current = true;
     v.pause();
     setPlaying(false);
     try {
@@ -300,11 +327,15 @@ export function Studio() {
       const ext = extensionForMimeType(cap.recording.mimeType);
       const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
       downloadBlob(blob, `kindlewood-edit-${stamp}.${ext}`);
-    } catch {
-      setExportError("Export failed. Try a shorter clip or a different browser.");
+    } catch (err) {
+      console.error("Export failed:", err);
+      setExportError(
+        `Export failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
     } finally {
+      exportingRef.current = false;
       setExporting(false);
-      v.currentTime = project.segments[0].startSec;
+      v.currentTime = project.segments[0].sourceStart;
     }
   };
 
@@ -328,7 +359,6 @@ export function Studio() {
 
   const newRecording = () => {
     setProject(null);
-    setDuration(0);
     setSelectedId(null);
     setActiveTab(null);
     cap.reset();
@@ -336,18 +366,24 @@ export function Studio() {
 
   const selectedZoom = project?.zooms.find((z) => z.id === selectedId) ?? null;
   const selectedSegment = project?.segments.find((s) => s.id === selectedId) ?? null;
-  const selectedClip = selectedZoom ?? selectedSegment;
-  const canSplit =
-    !!selectedClip &&
-    currentTime > selectedClip.startSec + MIN_LEN &&
-    currentTime < selectedClip.endSec - MIN_LEN;
+  let canSplit = false;
+  if (selectedZoom) {
+    canSplit =
+      currentTime > selectedZoom.startSec + MIN_LEN &&
+      currentTime < selectedZoom.endSec - MIN_LEN;
+  } else if (selectedSegment && project) {
+    const segTl = segmentTimelineStart(project, selectedSegment.id);
+    const dur = selectedSegment.sourceEnd - selectedSegment.sourceStart;
+    canSplit = currentTime > segTl + MIN_LEN && currentTime < segTl + dur - MIN_LEN;
+  }
   const canDelete =
     !!selectedZoom || (!!selectedSegment && (project?.segments.length ?? 0) > 1);
-  const splitTitle = selectedClip
-    ? canSplit
-      ? "Split at playhead"
-      : "Move the playhead inside the selected clip to split"
-    : "Select a clip to split";
+  const splitTitle =
+    selectedZoom || selectedSegment
+      ? canSplit
+        ? "Split at playhead"
+        : "Move the playhead inside the selected clip to split"
+      : "Select a clip to split";
 
   const zoomPanel = (
     <div className="panel">
@@ -536,7 +572,7 @@ export function Studio() {
 
         {project ? (
           <Tracks
-            duration={duration}
+            duration={keptDuration(project)}
             pixelsPerSec={pixelsPerSec}
             currentTime={currentTime}
             segments={project.segments}

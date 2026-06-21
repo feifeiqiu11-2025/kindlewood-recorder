@@ -1,6 +1,7 @@
 import type { VideoProject } from "../types/project";
 import { drawFrame } from "./renderFrame";
 import { zoomAt } from "./zoom";
+import { pickSupportedMimeType } from "../record/recording";
 
 const clamp = (v: number, lo: number, hi: number) =>
   Math.max(lo, Math.min(hi, v));
@@ -70,24 +71,39 @@ export async function exportVideo({
   const audioTracks = sourceStream?.getAudioTracks() ?? [];
 
   const canvasStream = canvas.captureStream(fps);
+  if (canvasStream.getVideoTracks().length === 0) {
+    throw new Error("canvas.captureStream produced no video track");
+  }
   const out = new MediaStream([
     ...canvasStream.getVideoTracks(),
     ...(project.audio.muted ? [] : audioTracks),
   ]);
 
-  const recorder = new MediaRecorder(out, { mimeType });
+  // Negotiate a mime the recorder actually supports for THIS stream; fall back
+  // gracefully rather than throwing on an unsupported codec string.
+  const recMime =
+    typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported(mimeType)
+      ? mimeType
+      : (pickSupportedMimeType() ?? "");
+  let recorder: MediaRecorder;
+  try {
+    recorder = recMime ? new MediaRecorder(out, { mimeType: recMime }) : new MediaRecorder(out);
+  } catch {
+    recorder = new MediaRecorder(out);
+  }
+  const outType = recorder.mimeType || recMime || "video/webm";
   const chunks: Blob[] = [];
   recorder.ondataavailable = (e) => {
     if (e.data.size > 0) chunks.push(e.data);
   };
 
   const segments = project.segments;
-  const totalKept = segments.reduce((s, g) => s + (g.endSec - g.startSec), 0);
+  const totalKept = segments.reduce((s, g) => s + (g.sourceEnd - g.sourceStart), 0);
   const wasMuted = video.muted;
   let segIndex = 0;
-  let doneKept = 0; // kept seconds completed in prior segments (for progress)
+  let doneKept = 0; // timeline seconds completed in prior segments
 
-  await seekTo(video, segments[0].startSec);
+  await seekTo(video, segments[0].sourceStart);
 
   return new Promise<Blob>((resolve, reject) => {
     let raf = 0;
@@ -96,7 +112,7 @@ export async function exportVideo({
       cancelAnimationFrame(raf);
       video.pause();
       video.muted = wasMuted;
-      resolve(new Blob(chunks, { type: mimeType }));
+      resolve(new Blob(chunks, { type: outType }));
     };
     recorder.onerror = () => reject(new Error("Recording failed during export."));
 
@@ -104,23 +120,27 @@ export async function exportVideo({
       const seg = segments[segIndex];
       const t = video.currentTime;
 
-      // Advance across segment boundaries (skipping deleted gaps).
-      if (t >= seg.endSec - 0.001) {
-        doneKept += seg.endSec - seg.startSec;
+      // Advance across segment boundaries (skipping deleted gaps). `ended`
+      // guards against the source being slightly shorter than the measured end.
+      if (t >= seg.sourceEnd - 0.001 || video.ended) {
+        doneKept += seg.sourceEnd - seg.sourceStart;
         segIndex += 1;
         if (segIndex >= segments.length) {
           recorder.stop();
           return;
         }
-        void seekTo(video, segments[segIndex].startSec).then(() => {
+        void seekTo(video, segments[segIndex].sourceStart).then(() => {
           raf = requestAnimationFrame(tick);
         });
         return;
       }
 
+      // Zoom is keyed to timeline time = completed segments + offset into this one.
+      const tlTime = doneKept + (t - seg.sourceStart);
+
       if (output) {
         // Letterbox the zoom-cropped frame into the fixed output ratio.
-        const z = zoomAt(project, t);
+        const z = zoomAt(project, tlTime);
         const sw = vw / z.scale;
         const sh = vh / z.scale;
         const sx = clamp(z.focusX * vw - sw / 2, 0, vw - sw);
@@ -139,10 +159,9 @@ export async function exportVideo({
         ctx.fillRect(0, 0, canvas.width, canvas.height);
         ctx.drawImage(video, sx, sy, sw, sh, (canvas.width - dw) / 2, (canvas.height - dh) / 2, dw, dh);
       } else {
-        drawFrame(ctx, video, zoomAt(project, t));
+        drawFrame(ctx, video, zoomAt(project, tlTime));
       }
-      const progressed = doneKept + (t - seg.startSec);
-      onProgress?.(clamp(progressed / Math.max(0.001, totalKept), 0, 1));
+      onProgress?.(clamp(tlTime / Math.max(0.001, totalKept), 0, 1));
 
       raf = requestAnimationFrame(tick);
     };

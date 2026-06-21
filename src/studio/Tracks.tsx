@@ -61,6 +61,14 @@ export function Tracks({
   const laneStyle = fill ? { flex: 1, minWidth: 0 } : { width: laneWidth };
   const contentStyle = fill ? { width: "100%" } : { width: LABEL_W + laneWidth };
 
+  // Lay segments end-to-end (ripple timeline): timeline position is cumulative.
+  const placed = segments.map((s, i) => {
+    const tlStart = segments
+      .slice(0, i)
+      .reduce((a, g) => a + (g.sourceEnd - g.sourceStart), 0);
+    return { s, tlStart, tlEnd: tlStart + (s.sourceEnd - s.sourceStart) };
+  });
+
   const ticks: number[] = [];
   for (let t = 0, step = tickStep(pixelsPerSec); t <= duration + 0.001; t += step) {
     ticks.push(t);
@@ -86,15 +94,21 @@ export function Tracks({
         onSeek(timeAt(e.clientX, videoLaneRef.current));
         break;
       case "segStart": {
-        const t = timeAt(e.clientX, videoLaneRef.current);
-        const s = segments.find((g) => g.id === drag.id);
-        if (s) onTrimSegment(drag.id, Math.min(t, s.endSec - MIN_LEN), s.endSec);
+        // Drag left edge: trim the head (change sourceStart) by the timeline delta.
+        const ps = placed.find((p) => p.s.id === drag.id);
+        if (ps) {
+          const headTrim = timeAt(e.clientX, videoLaneRef.current) - ps.tlStart;
+          onTrimSegment(drag.id, ps.s.sourceStart + headTrim, ps.s.sourceEnd);
+        }
         break;
       }
       case "segEnd": {
-        const t = timeAt(e.clientX, videoLaneRef.current);
-        const s = segments.find((g) => g.id === drag.id);
-        if (s) onTrimSegment(drag.id, s.startSec, Math.max(t, s.startSec + MIN_LEN));
+        // Drag right edge: set the kept duration (change sourceEnd).
+        const ps = placed.find((p) => p.s.id === drag.id);
+        if (ps) {
+          const newDur = Math.max(MIN_LEN, timeAt(e.clientX, videoLaneRef.current) - ps.tlStart);
+          onTrimSegment(drag.id, ps.s.sourceStart, ps.s.sourceStart + newDur);
+        }
         break;
       }
       case "zoomMove": {
@@ -163,11 +177,11 @@ export function Tracks({
             }}
           >
             {hasVideo ? (
-              segments.map((s) => (
+              placed.map(({ s, tlStart, tlEnd }) => (
                 <div
                   key={s.id}
                   className={`tracks__clip${s.id === selectedId ? " is-selected" : ""}`}
-                  style={{ left: px(s.startSec), width: px(s.endSec - s.startSec) }}
+                  style={{ left: px(tlStart), width: px(tlEnd - tlStart) }}
                   onPointerDown={(e) => {
                     // Select the clip; the playhead is scrubbed from the ruler.
                     e.stopPropagation();

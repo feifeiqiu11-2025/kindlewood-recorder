@@ -31,12 +31,15 @@ export const ZoomBlockSchema = z.object({
 
 export type ZoomBlock = z.infer<typeof ZoomBlockSchema>;
 
-/** A kept slice of the source recording. The final video is the segments
- *  played in order; gaps between them (deleted ranges) are dropped. */
+/** A kept slice of the source recording. The final video plays the segments
+ *  back-to-back in array order (a ripple timeline): each segment's TIMELINE
+ *  position is the cumulative duration of the segments before it, so deleting
+ *  one closes the gap automatically. `sourceStart/sourceEnd` reference the raw
+ *  recording; zoom block times are in TIMELINE seconds. */
 export const SegmentSchema = z.object({
   id: z.string(),
-  startSec: z.number().min(0),
-  endSec: z.number().min(0),
+  sourceStart: z.number().min(0),
+  sourceEnd: z.number().min(0),
 });
 
 export type Segment = z.infer<typeof SegmentSchema>;
@@ -64,13 +67,70 @@ export function emptyProject(sourceDurationSec: number): VideoProject {
   return {
     version: 1,
     sourceDurationSec,
-    segments: [{ id: crypto.randomUUID(), startSec: 0, endSec: sourceDurationSec }],
+    segments: [{ id: crypto.randomUUID(), sourceStart: 0, sourceEnd: sourceDurationSec }],
     zooms: [],
     audio: { muted: false, volumeDb: 0 },
   };
 }
 
-/** Total kept duration across all segments. */
+const segDur = (s: Segment) => s.sourceEnd - s.sourceStart;
+
+/** Total timeline (output) duration — the segments played back-to-back. */
 export function keptDuration(p: VideoProject): number {
-  return p.segments.reduce((sum, s) => sum + (s.endSec - s.startSec), 0);
+  return p.segments.reduce((sum, s) => sum + segDur(s), 0);
+}
+
+/** The segment containing a SOURCE time, with its timeline start offset. */
+export function segmentAtSource(
+  p: VideoProject,
+  sourceSec: number,
+): { seg: Segment; index: number; tlStart: number } | null {
+  let acc = 0;
+  for (let i = 0; i < p.segments.length; i++) {
+    const s = p.segments[i];
+    if (sourceSec >= s.sourceStart - 1e-6 && sourceSec <= s.sourceEnd + 1e-6) {
+      return { seg: s, index: i, tlStart: acc };
+    }
+    acc += segDur(s);
+  }
+  return null;
+}
+
+/** Convert a SOURCE time to TIMELINE time (snaps gaps to the next segment). */
+export function sourceToTimeline(p: VideoProject, sourceSec: number): number {
+  let acc = 0;
+  for (const s of p.segments) {
+    if (sourceSec < s.sourceStart) return acc;
+    if (sourceSec <= s.sourceEnd) return acc + (sourceSec - s.sourceStart);
+    acc += segDur(s);
+  }
+  return acc;
+}
+
+/** Convert a TIMELINE time to a SOURCE time (and the owning segment). */
+export function timelineToSource(
+  p: VideoProject,
+  tlSec: number,
+): { sourceTime: number; index: number; tlStart: number } {
+  let acc = 0;
+  for (let i = 0; i < p.segments.length; i++) {
+    const s = p.segments[i];
+    const dur = segDur(s);
+    if (tlSec <= acc + dur + 1e-6) {
+      return { sourceTime: s.sourceStart + Math.max(0, tlSec - acc), index: i, tlStart: acc };
+    }
+    acc += dur;
+  }
+  const last = p.segments[p.segments.length - 1];
+  return { sourceTime: last.sourceEnd, index: p.segments.length - 1, tlStart: acc - segDur(last) };
+}
+
+/** Timeline start offset of a segment by id (or 0). */
+export function segmentTimelineStart(p: VideoProject, id: string): number {
+  let acc = 0;
+  for (const s of p.segments) {
+    if (s.id === id) return acc;
+    acc += segDur(s);
+  }
+  return acc;
 }
