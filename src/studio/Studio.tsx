@@ -578,20 +578,22 @@ function RecordControls({
   if (phase === "idle") {
     return (
       <>
-        <button
-          className={`toggle-btn${settings.mic ? " is-on" : ""}`}
-          aria-pressed={settings.mic}
-          onClick={() => setSettings((s) => ({ ...s, mic: !s.mic }))}
-        >
-          Microphone
-        </button>
-        <button
-          className={`toggle-btn${settings.camera ? " is-on" : ""}`}
-          aria-pressed={settings.camera}
-          onClick={() => setSettings((s) => ({ ...s, camera: !s.camera }))}
-        >
-          Camera
-        </button>
+        <label className="check">
+          <input
+            type="checkbox"
+            checked={settings.mic}
+            onChange={(e) => setSettings((s) => ({ ...s, mic: e.target.checked }))}
+          />
+          <span>Microphone</span>
+        </label>
+        <label className="check">
+          <input
+            type="checkbox"
+            checked={settings.camera}
+            onChange={(e) => setSettings((s) => ({ ...s, camera: e.target.checked }))}
+          />
+          <span>Camera</span>
+        </label>
         {settings.camera && (
           <div className="segmented" role="group" aria-label="Camera shape">
             {(["rounded", "circle", "square"] as const).map((sh) => (
@@ -606,6 +608,7 @@ function RecordControls({
             ))}
           </div>
         )}
+        <span className="bar__spacer" />
         <button className="btn btn--primary" onClick={cap.setup} disabled={!cap.supported}>
           Set up recording
         </button>
@@ -616,14 +619,16 @@ function RecordControls({
     return (
       <>
         <span className="bar__hint">Ready when you are.</span>
-        <button className="btn btn--rec" onClick={onStart}>Start recording</button>
+        <span className="bar__spacer" />
         <button className="btn" onClick={cap.cancel}>Cancel</button>
+        <button className="btn btn--rec" onClick={onStart}>Start recording</button>
       </>
     );
   }
   if (phase === "countdown") {
     return (
       <>
+        <span className="bar__spacer" />
         <button className="btn btn--rec" disabled>Starting in {cap.countdown}…</button>
         <button className="btn" onClick={cap.cancel}>Cancel</button>
       </>
@@ -633,6 +638,7 @@ function RecordControls({
     return (
       <>
         <span className="bar__time">{fmt(cap.elapsedSec)}</span>
+        <span className="bar__spacer" />
         <button className="btn" onClick={cap.pause}>Pause</button>
         <button className="btn btn--rec" onClick={cap.stop}>Stop</button>
       </>
@@ -641,9 +647,10 @@ function RecordControls({
   if (phase === "paused") {
     return (
       <>
-        <span className="bar__time">{fmt(cap.elapsedSec)} (paused)</span>
+        <span className="bar__time">{fmt(cap.elapsedSec)} · paused</span>
+        <span className="bar__spacer" />
+        <button className="btn" onClick={cap.stop}>Stop</button>
         <button className="btn btn--primary" onClick={cap.resume}>Resume</button>
-        <button className="btn btn--rec" onClick={cap.stop}>Stop</button>
       </>
     );
   }

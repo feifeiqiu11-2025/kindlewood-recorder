@@ -37,37 +37,36 @@
   gap: 0.5rem;
 }
 
-/* Segmented control (aspect ratio) */
+/* Segmented control (aspect ratio, camera shape) */
 .segmented {
   display: inline-flex;
-  gap: 2px;
-  padding: 2px;
+  gap: 3px;
+  padding: 3px;
   background: #efeef7;
-  border-radius: 9px;
-  margin-right: 0.25rem;
+  border-radius: 10px;
 }
 
 .segmented__btn {
   border: none;
   background: transparent;
-  padding: 5px 10px;
+  padding: 5px 12px;
   border-radius: 7px;
-  font-size: 0.78rem;
+  font-size: 0.8rem;
   font-weight: 600;
-  color: #6a6a82;
+  color: #6f6f88;
   cursor: pointer;
   font-variant-numeric: tabular-nums;
-  transition: background 0.12s, color 0.12s;
+  transition: background 0.14s ease, color 0.14s ease, box-shadow 0.14s ease;
 }
 
 .segmented__btn:hover {
-  color: #1a1a2e;
+  color: #20202e;
 }
 
 .segmented__btn.is-active {
   background: #fff;
-  color: #1a1a2e;
-  box-shadow: 0 1px 2px rgba(20, 20, 40, 0.12);
+  color: #20202e;
+  box-shadow: 0 1px 3px rgba(20, 20, 40, 0.14);
 }
 
 .studio__source {
@@ -244,28 +243,28 @@
   font-size: 0.9rem;
 }
 
-/* Toggle buttons (mic / camera) — consistent with the button system */
-.toggle-btn {
+/* Checkboxes (mic / camera) — label sized to match button labels */
+.check {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
   min-height: 38px;
-  padding: 0 0.9rem;
-  border: 1px solid #e3e2ee;
-  border-radius: 8px;
-  background: #fff;
-  color: #50506a;
   font-size: 0.9rem;
   font-weight: 600;
+  color: #44445e;
   cursor: pointer;
-  transition: background 0.12s, border-color 0.12s, color 0.12s;
+  user-select: none;
 }
 
-.toggle-btn:hover {
-  background: #f6f5fc;
+.check input[type="checkbox"] {
+  width: 17px;
+  height: 17px;
+  accent-color: #6d4dff;
+  cursor: pointer;
 }
 
-.toggle-btn.is-on {
-  background: #efeaff;
-  border-color: #c7b9ff;
-  color: #4c30d8;
+.bar__spacer {
+  flex: 1;
 }
 
 /* Buttons — one system across record + edit phases */
@@ -274,20 +273,27 @@
   align-items: center;
   gap: 0.4rem;
   min-height: 38px;
-  padding: 0 0.9rem;
-  border: 1px solid #e3e2ee;
-  border-radius: 8px;
+  padding: 0 0.95rem;
+  border: 1px solid #e7e6f1;
+  border-radius: 10px;
   background: #fff;
-  color: #20202e;
+  color: #2a2a3c;
   font-size: 0.9rem;
   font-weight: 600;
+  letter-spacing: -0.003em;
   cursor: pointer;
-  transition: background 0.12s, border-color 0.12s, box-shadow 0.12s;
+  transition: background 0.14s ease, border-color 0.14s ease,
+    box-shadow 0.14s ease, transform 0.06s ease;
 }
 
 .btn:hover:not(:disabled) {
-  background: #f6f5fc;
-  border-color: #d6d5e6;
+  background: #f7f6fc;
+  border-color: #dad9ea;
+  box-shadow: 0 1px 2px rgba(20, 20, 40, 0.04);
+}
+
+.btn:active:not(:disabled) {
+  transform: translateY(0.5px);
 }
 
 .btn:disabled {
@@ -297,32 +303,35 @@
 
 .btn--sm {
   min-height: 32px;
-  padding: 0 0.6rem;
+  padding: 0 0.65rem;
   font-size: 0.82rem;
+  border-radius: 8px;
 }
 
 .btn--primary {
   background: #6d4dff;
   border-color: #6d4dff;
   color: #fff;
-  box-shadow: 0 1px 2px rgba(109, 77, 255, 0.25);
+  box-shadow: 0 2px 8px rgba(109, 77, 255, 0.3);
 }
 
 .btn--primary:hover:not(:disabled) {
-  background: #5b3df5;
-  border-color: #5b3df5;
+  background: #5d3df0;
+  border-color: #5d3df0;
+  box-shadow: 0 3px 12px rgba(109, 77, 255, 0.36);
 }
 
 .btn--rec {
-  background: #e23d5b;
-  border-color: #e23d5b;
+  background: #ec3a5b;
+  border-color: #ec3a5b;
   color: #fff;
-  box-shadow: 0 1px 2px rgba(226, 61, 91, 0.25);
+  box-shadow: 0 2px 8px rgba(236, 58, 91, 0.3);
 }
 
 .btn--rec:hover:not(:disabled) {
-  background: #c8324d;
-  border-color: #c8324d;
+  background: #d72f50;
+  border-color: #d72f50;
+  box-shadow: 0 3px 12px rgba(236, 58, 91, 0.36);
 }
 
 .btn--danger {
@@ -400,17 +409,7 @@
     background: #34344f;
     color: #fff;
   }
-  .toggle-btn {
-    background: #21213a;
-    border-color: #34344f;
+  .check {
     color: #c2c2da;
-  }
-  .toggle-btn:hover {
-    background: #2a2a48;
-  }
-  .toggle-btn.is-on {
-    background: #2c2350;
-    border-color: #5b3df5;
-    color: #c7b9ff;
   }
 }
