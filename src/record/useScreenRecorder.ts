@@ -60,7 +60,8 @@ export function useScreenRecorder(): UseScreenRecorder {
 
   const stop = useCallback(() => {
     // Stopping the recorder fires onstop, which finalizes the blob.
-    recorderRef.current?.state !== "inactive" && recorderRef.current?.stop();
+    const recorder = recorderRef.current;
+    if (recorder && recorder.state !== "inactive") recorder.stop();
     clearTick();
   }, []);
 

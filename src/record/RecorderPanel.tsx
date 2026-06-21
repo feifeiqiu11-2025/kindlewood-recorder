@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useScreenRecorder } from "./useScreenRecorder";
+import { useScreenRecorder, type Recording } from "./useScreenRecorder";
 import "./RecorderPanel.css";
 
 function formatDuration(totalSec: number): string {
@@ -9,7 +9,11 @@ function formatDuration(totalSec: number): string {
   return `${mm}:${ss}`;
 }
 
-export function RecorderPanel() {
+export function RecorderPanel({
+  onEdit,
+}: {
+  onEdit?: (recording: Recording) => void;
+}) {
   const rec = useScreenRecorder();
   const [includeMic, setIncludeMic] = useState(true);
 
@@ -87,11 +91,16 @@ export function RecorderPanel() {
             {(rec.recording.blob.size / (1024 * 1024)).toFixed(1)} MB
           </p>
           <div className="recorder__controls">
-            <button
-              className="recorder__btn recorder__btn--primary"
-              onClick={rec.download}
-            >
-              Download
+            {onEdit && (
+              <button
+                className="recorder__btn recorder__btn--primary"
+                onClick={() => onEdit(rec.recording!)}
+              >
+                Edit (trim &amp; zoom)
+              </button>
+            )}
+            <button className="recorder__btn" onClick={rec.download}>
+              Download raw
             </button>
             <button className="recorder__btn" onClick={rec.reset}>
               Record again

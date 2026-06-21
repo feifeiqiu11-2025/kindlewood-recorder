@@ -15,9 +15,9 @@ import { z } from "zod";
  */
 export const ZoomBlockSchema = z.object({
   id: z.string(),
-  /** Start of the zoom window, in seconds (mix-time, after trim). */
+  /** Start of the zoom window, in SOURCE seconds (same clock as the raw recording). */
   startSec: z.number().min(0),
-  /** End of the zoom window, in seconds. Must be > startSec. */
+  /** End of the zoom window, in source seconds. Must be > startSec. */
   endSec: z.number().min(0),
   /** Focus point X as a fraction of frame width (0..1). */
   focusX: z.number().min(0).max(1),
