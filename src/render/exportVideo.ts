@@ -85,11 +85,24 @@ export async function exportVideo({
     typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported(mimeType)
       ? mimeType
       : (pickSupportedMimeType() ?? "");
+  // Target a healthy bitrate (~0.2 bits/px/frame) so the output stays sharp
+  // instead of the browser's soft default. Capped to keep files reasonable.
+  const videoBitsPerSecond = Math.min(
+    24_000_000,
+    Math.round(canvas.width * canvas.height * fps * 0.2),
+  );
   let recorder: MediaRecorder;
   try {
-    recorder = recMime ? new MediaRecorder(out, { mimeType: recMime }) : new MediaRecorder(out);
+    recorder = new MediaRecorder(out, {
+      ...(recMime ? { mimeType: recMime } : {}),
+      videoBitsPerSecond,
+    });
   } catch {
-    recorder = new MediaRecorder(out);
+    try {
+      recorder = recMime ? new MediaRecorder(out, { mimeType: recMime }) : new MediaRecorder(out);
+    } catch {
+      recorder = new MediaRecorder(out);
+    }
   }
   const outType = recorder.mimeType || recMime || "video/webm";
   const chunks: Blob[] = [];
