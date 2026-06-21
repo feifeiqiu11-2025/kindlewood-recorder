@@ -131,10 +131,14 @@ export function Tracks({
         onPointerUp={end}
         onPointerLeave={end}
       >
-        {/* Ruler */}
+        {/* Ruler — drag here to scrub the playhead */}
         <div className="tracks__row tracks__row--ruler">
           <div className="tracks__label" style={{ width: LABEL_W }} />
-          <div className="tracks__lane tracks__ruler" style={laneStyle}>
+          <div
+            className="tracks__lane tracks__ruler"
+            style={laneStyle}
+            onPointerDown={(e) => hasVideo && begin(e, { kind: "seek" })}
+          >
             {ticks.map((t) => (
               <span key={t} className="tracks__tick" style={{ left: px(t) }}>
                 {fmt(t)}
@@ -165,9 +169,9 @@ export function Tracks({
                   className={`tracks__clip${s.id === selectedId ? " is-selected" : ""}`}
                   style={{ left: px(s.startSec), width: px(s.endSec - s.startSec) }}
                   onPointerDown={(e) => {
+                    // Select the clip; the playhead is scrubbed from the ruler.
+                    e.stopPropagation();
                     onSelect(s.id);
-                    onSeek(timeAt(e.clientX, videoLaneRef.current));
-                    begin(e, { kind: "seek" });
                   }}
                 >
                   <span

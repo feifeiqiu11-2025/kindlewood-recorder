@@ -65,6 +65,7 @@
 
 .tracks__ruler {
   height: 26px;
+  cursor: ew-resize;
 }
 
 .tracks__lane--muted {

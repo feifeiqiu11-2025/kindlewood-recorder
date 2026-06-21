@@ -11,6 +11,10 @@ import { FloatingControls } from "./FloatingControls";
 import { ActionBar } from "./ActionBar";
 import { dbToGain } from "./audio";
 import { ASPECTS, aspectCss, aspectDims, type Aspect } from "./aspect";
+import { ZoomTargetOverlay } from "./ZoomTargetOverlay";
+import { focusFromClient } from "./stageGeometry";
+
+const aspectNum = (a: Aspect) => (a === "16:9" ? 16 / 9 : a === "9:16" ? 9 / 16 : 1);
 import { SoundsIcon, MusicIcon, ZoomIcon } from "./icons";
 import "./Studio.css";
 
@@ -24,23 +28,6 @@ const DEFAULT_ZOOM_LEN = 2;
 const fmt = (t: number) =>
   `${Math.floor(Math.max(0, t) / 60)}:${String(Math.floor(Math.max(0, t) % 60)).padStart(2, "0")}`;
 
-function drawMarker(ctx: CanvasRenderingContext2D, fx: number, fy: number) {
-  const x = fx * ctx.canvas.width;
-  const y = fy * ctx.canvas.height;
-  const r = Math.max(14, ctx.canvas.width * 0.012);
-  ctx.save();
-  ctx.strokeStyle = "rgba(255,77,109,0.95)";
-  ctx.lineWidth = Math.max(2, ctx.canvas.width * 0.002);
-  ctx.beginPath();
-  ctx.arc(x, y, r, 0, Math.PI * 2);
-  ctx.moveTo(x - r * 1.6, y);
-  ctx.lineTo(x + r * 1.6, y);
-  ctx.moveTo(x, y - r * 1.6);
-  ctx.lineTo(x, y + r * 1.6);
-  ctx.stroke();
-  ctx.restore();
-}
-
 export function Studio() {
   const cap = useCaptureController();
 
@@ -51,6 +38,7 @@ export function Studio() {
 
   const [project, setProject] = useState<VideoProject | null>(null);
   const [duration, setDuration] = useState(0);
+  const [videoAspect, setVideoAspect] = useState(16 / 9);
   const [currentTime, setCurrentTime] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -99,6 +87,7 @@ export function Studio() {
       setDuration(safe);
       setProject(emptyProject(safe));
       setCurrentTime(0);
+      if (v.videoWidth && v.videoHeight) setVideoAspect(v.videoWidth / v.videoHeight);
     };
     v.addEventListener("loadedmetadata", init);
     if (v.readyState >= 1) init();
@@ -122,11 +111,11 @@ export function Studio() {
             c.width = cw;
             c.height = ch;
           }
-          const editFocus = !!selectedRef.current && v.paused;
-          if (editFocus) {
+          // While a zoom block is selected and paused, show the full frame so
+          // the target box (HTML overlay) can be placed against real content.
+          const editingZoom = p.zooms.some((b) => b.id === selectedRef.current);
+          if (editingZoom && v.paused) {
             drawFrame(ctx, v, { scale: 1, focusX: 0.5, focusY: 0.5 });
-            const z = p.zooms.find((b) => b.id === selectedRef.current);
-            if (z) drawMarker(ctx, z.focusX, z.focusY);
           } else {
             drawFrame(ctx, v, zoomAt(p, v.currentTime));
           }
@@ -281,15 +270,15 @@ export function Studio() {
   }, [project?.audio.volumeDb, project]);
 
   const onCanvasPointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    const id = selectedRef.current;
     const v = videoRef.current;
     const c = canvasRef.current;
-    if (!id || !c || !v || !v.paused) return;
+    const p = projectRef.current;
+    if (!v || !c || !p || !v.paused) return;
+    const z = p.zooms.find((b) => b.id === selectedRef.current);
+    if (!z) return;
     const rect = c.getBoundingClientRect();
-    updateZoom(id, {
-      focusX: clamp((e.clientX - rect.left) / rect.width, 0, 1),
-      focusY: clamp((e.clientY - rect.top) / rect.height, 0, 1),
-    });
+    const va = v.videoWidth / v.videoHeight || 16 / 9;
+    updateZoom(z.id, focusFromClient(e.clientX, e.clientY, rect, va, aspectNum(aspect)));
   };
 
   const handleExport = async () => {
@@ -383,7 +372,7 @@ export function Studio() {
             <input type="range" min={0} max={1.5} step={0.1} value={selectedZoom.easeSec}
               onChange={(e) => updateZoom(selectedZoom.id, { easeSec: Number(e.target.value) })} />
           </label>
-          <p className="hint">Pause and click the preview to set the focus point.</p>
+          <p className="hint">Pause, then drag the target box on the preview to aim the zoom — drag its corner to set strength.</p>
         </div>
       ) : (
         <p className="hint">
@@ -454,7 +443,19 @@ export function Studio() {
 
         <div className="stage" style={{ aspectRatio: aspectCss(aspect) }}>
           {editing ? (
-            <canvas ref={canvasRef} className="stage__canvas" onPointerDown={onCanvasPointerDown} />
+            <>
+              <canvas ref={canvasRef} className="stage__canvas" onPointerDown={onCanvasPointerDown} />
+              {selectedZoom && !playing && (
+                <ZoomTargetOverlay
+                  focusX={selectedZoom.focusX}
+                  focusY={selectedZoom.focusY}
+                  scale={selectedZoom.scale}
+                  videoAspect={videoAspect}
+                  stageAspect={aspectNum(aspect)}
+                  onChange={(patch) => updateZoom(selectedZoom.id, patch)}
+                />
+              )}
+            </>
           ) : cap.displayStream ? (
             <div className="stage__live">
               {/* Live mirror of the captured surface — confirms what's recorded. */}
