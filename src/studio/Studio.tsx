@@ -370,7 +370,9 @@ export function Studio() {
     dpip
       ?.requestWindow(hasScript ? { width: 460, height: 340 } : { width: 300, height: 96 })
       .then((w) => {
-        w.document.body.style.cssText = "margin:0;background:#16161f";
+        // Fill the window so the overlay reflows when the user resizes it.
+        w.document.body.style.cssText =
+          "margin:0;height:100vh;overflow:hidden;background:#16161f";
         w.document.title = hasScript ? "Teleprompter" : "Recording";
         w.addEventListener("pagehide", () => setPipWindow(null));
         setPipWindow(w);

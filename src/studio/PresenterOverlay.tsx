@@ -16,7 +16,8 @@ const S = {
   controls: {
     display: "flex",
     alignItems: "center",
-    gap: 10,
+    flexWrap: "wrap",
+    gap: 8,
     flex: "0 0 auto",
   } as React.CSSProperties,
   dot: (on: boolean): React.CSSProperties => ({
@@ -53,12 +54,14 @@ const S = {
   tpRow: {
     display: "flex",
     alignItems: "center",
-    gap: 12,
+    flexWrap: "wrap",
+    gap: 10,
     flex: "0 0 auto",
     fontSize: 12,
     color: "#c2c2da",
   } as React.CSSProperties,
   slider: { display: "inline-flex", alignItems: "center", gap: 6 } as React.CSSProperties,
+  range: { width: 84 } as React.CSSProperties,
 };
 
 type Props = {
@@ -85,8 +88,9 @@ function Body(props: Props) {
   const rootStyle: React.CSSProperties = {
     display: "flex",
     flexDirection: "column",
-    gap: 10,
-    padding: 12,
+    gap: 8,
+    padding: 10,
+    minHeight: 0,
     boxSizing: "border-box",
     background: "#16161f",
     color: "#fff",
@@ -145,6 +149,7 @@ function Body(props: Props) {
             <label style={S.slider}>
               Speed
               <input
+                style={S.range}
                 type="range"
                 min={10}
                 max={140}
@@ -156,6 +161,7 @@ function Body(props: Props) {
             <label style={S.slider}>
               Size
               <input
+                style={S.range}
                 type="range"
                 min={16}
                 max={44}
