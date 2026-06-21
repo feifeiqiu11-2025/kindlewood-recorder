@@ -155,9 +155,9 @@ function Body(props: Props) {
               <input
                 style={S.range}
                 type="range"
-                min={10}
+                min={4}
                 max={140}
-                step={5}
+                step={2}
                 value={props.tpSpeed}
                 onChange={(e) => props.onTpSpeed(Number(e.target.value))}
               />

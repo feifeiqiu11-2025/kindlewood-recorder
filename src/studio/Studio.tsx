@@ -64,7 +64,7 @@ export function Studio() {
   // Teleprompter (presenter aid — never recorded or exported).
   const [script, setScript] = useState("");
   const [tpPlaying, setTpPlaying] = useState(true);
-  const [tpSpeed, setTpSpeed] = useState(22);
+  const [tpSpeed, setTpSpeed] = useState(12);
   const [tpFontSize, setTpFontSize] = useState(26);
   const [tpResetKey, setTpResetKey] = useState(0);
 
