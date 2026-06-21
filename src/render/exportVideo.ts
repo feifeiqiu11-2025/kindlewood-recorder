@@ -24,6 +24,9 @@ export type ExportOptions = {
   fps?: number;
   /** Cap output width to bound memory on very large screen captures. */
   maxWidth?: number;
+  /** Fixed output dimensions (e.g. a chosen aspect ratio). The frame is
+   *  letterboxed to fit. When omitted, output matches the source ratio. */
+  output?: { w: number; h: number };
   onProgress?: (fraction: number) => void;
 };
 
@@ -41,15 +44,21 @@ export async function exportVideo({
   mimeType,
   fps = 30,
   maxWidth = 1920,
+  output,
   onProgress,
 }: ExportOptions): Promise<Blob> {
   const vw = video.videoWidth;
   const vh = video.videoHeight;
-  const scale = Math.min(1, maxWidth / Math.max(1, vw));
 
   const canvas = document.createElement("canvas");
-  canvas.width = Math.round(vw * scale);
-  canvas.height = Math.round(vh * scale);
+  if (output) {
+    canvas.width = output.w;
+    canvas.height = output.h;
+  } else {
+    const scale = Math.min(1, maxWidth / Math.max(1, vw));
+    canvas.width = Math.round(vw * scale);
+    canvas.height = Math.round(vh * scale);
+  }
   const ctx = canvas.getContext("2d");
   if (!ctx) throw new Error("Could not get a 2D canvas context for export.");
 
@@ -91,7 +100,29 @@ export async function exportVideo({
 
     const tick = () => {
       const t = video.currentTime;
-      drawFrame(ctx, video, zoomAt(project, t));
+      if (output) {
+        // Letterbox the zoom-cropped frame into the fixed output ratio.
+        const z = zoomAt(project, t);
+        const sw = vw / z.scale;
+        const sh = vh / z.scale;
+        const sx = clamp(z.focusX * vw - sw / 2, 0, vw - sw);
+        const sy = clamp(z.focusY * vh - sh / 2, 0, vh - sh);
+        const cropAspect = vw / vh;
+        const outAspect = canvas.width / canvas.height;
+        let dw: number, dh: number;
+        if (cropAspect > outAspect) {
+          dw = canvas.width;
+          dh = canvas.width / cropAspect;
+        } else {
+          dh = canvas.height;
+          dw = canvas.height * cropAspect;
+        }
+        ctx.fillStyle = "#000";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(video, sx, sy, sw, sh, (canvas.width - dw) / 2, (canvas.height - dh) / 2, dw, dh);
+      } else {
+        drawFrame(ctx, video, zoomAt(project, t));
+      }
       onProgress?.(clamp((t - start) / Math.max(0.001, end - start), 0, 1));
 
       if (t >= end || video.ended) {

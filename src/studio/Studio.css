@@ -20,16 +20,54 @@
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
+  padding-bottom: 0.85rem;
+  border-bottom: 1px solid #ecebf3;
 }
 
 .studio__title {
   margin: 0;
-  font-size: 1.15rem;
+  font-size: 1.02rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
 }
 
 .studio__header-actions {
   display: flex;
+  align-items: center;
   gap: 0.5rem;
+}
+
+/* Segmented control (aspect ratio) */
+.segmented {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  background: #efeef7;
+  border-radius: 9px;
+  margin-right: 0.25rem;
+}
+
+.segmented__btn {
+  border: none;
+  background: transparent;
+  padding: 5px 10px;
+  border-radius: 7px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #6a6a82;
+  cursor: pointer;
+  font-variant-numeric: tabular-nums;
+  transition: background 0.12s, color 0.12s;
+}
+
+.segmented__btn:hover {
+  color: #1a1a2e;
+}
+
+.segmented__btn.is-active {
+  background: #fff;
+  color: #1a1a2e;
+  box-shadow: 0 1px 2px rgba(20, 20, 40, 0.12);
 }
 
 .studio__source {
@@ -50,15 +88,17 @@
   font-size: 0.9rem;
 }
 
-/* Stage / preview */
+/* Stage / preview — sized by height so tall ratios (9:16) stay centered
+   and don't blow out the layout. aspect-ratio is set inline. */
 .stage {
   position: relative;
-  width: 100%;
-  background: #000;
-  border-radius: 12px;
+  height: 54vh;
+  width: auto;
+  max-width: 100%;
+  margin: 0 auto;
+  background: #08080d;
+  border-radius: 14px;
   overflow: hidden;
-  aspect-ratio: 16 / 9;
-  max-height: 52vh;
 }
 
 .stage__live,
@@ -142,17 +182,33 @@
   position: absolute;
   top: 12px;
   left: 12px;
-  padding: 4px 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 11px;
   border-radius: 999px;
   background: rgba(226, 61, 91, 0.92);
   color: #fff;
-  font-size: 0.8rem;
+  font-size: 0.74rem;
   font-weight: 700;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.06em;
+}
+
+.stage__rec-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #fff;
+  animation: stage-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes stage-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
 }
 
 .stage__rec--paused {
-  background: rgba(80, 80, 110, 0.92);
+  background: rgba(60, 60, 84, 0.92);
 }
 
 /* Transport / record bar */
@@ -161,6 +217,8 @@
   align-items: center;
   gap: 0.75rem;
   flex-wrap: wrap;
+  padding: 8px 2px;
+  border-top: 1px solid #f0eff7;
 }
 
 .bar__time {
@@ -182,21 +240,26 @@
   cursor: pointer;
 }
 
-/* Buttons */
+/* Buttons — one system across record + edit phases */
 .btn {
-  min-height: 40px;
-  padding: 0 0.95rem;
-  border: 1px solid #d4d3e3;
-  border-radius: 9px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 38px;
+  padding: 0 0.9rem;
+  border: 1px solid #e3e2ee;
+  border-radius: 8px;
   background: #fff;
-  color: #1a1a2e;
-  font-size: 0.92rem;
+  color: #20202e;
+  font-size: 0.9rem;
   font-weight: 600;
   cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, box-shadow 0.12s;
 }
 
 .btn:hover:not(:disabled) {
-  background: #f4f4fb;
+  background: #f6f5fc;
+  border-color: #d6d5e6;
 }
 
 .btn:disabled {
@@ -211,23 +274,27 @@
 }
 
 .btn--primary {
-  background: #5b3df5;
-  border-color: #5b3df5;
+  background: #6d4dff;
+  border-color: #6d4dff;
   color: #fff;
+  box-shadow: 0 1px 2px rgba(109, 77, 255, 0.25);
 }
 
 .btn--primary:hover:not(:disabled) {
-  background: #4c30d8;
+  background: #5b3df5;
+  border-color: #5b3df5;
 }
 
 .btn--rec {
   background: #e23d5b;
   border-color: #e23d5b;
   color: #fff;
+  box-shadow: 0 1px 2px rgba(226, 61, 91, 0.25);
 }
 
 .btn--rec:hover:not(:disabled) {
   background: #c8324d;
+  border-color: #c8324d;
 }
 
 .btn--danger {
@@ -273,6 +340,9 @@
   .studio {
     color: #ececf5;
   }
+  .studio__header {
+    border-color: #2a2a40;
+  }
   .btn {
     background: #21213a;
     border-color: #34344f;
@@ -280,8 +350,26 @@
   }
   .btn:hover:not(:disabled) {
     background: #2a2a48;
+    border-color: #40405c;
   }
+  .bar,
   .bar__time {
     color: #c2c2da;
+  }
+  .bar {
+    border-color: #26263c;
+  }
+  .segmented {
+    background: #20203a;
+  }
+  .segmented__btn {
+    color: #a8a8c0;
+  }
+  .segmented__btn:hover {
+    color: #fff;
+  }
+  .segmented__btn.is-active {
+    background: #34344f;
+    color: #fff;
   }
 }

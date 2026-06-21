@@ -60,6 +60,11 @@ export function Tracks({
 
   const px = (t: number) => t * pixelsPerSec;
   const laneWidth = Math.max(duration * pixelsPerSec, 1);
+  // Before a recording exists, let lanes flex to fill the width instead of
+  // collapsing to a 70px sliver with overflowing hint text.
+  const fill = !hasVideo;
+  const laneStyle = fill ? { flex: 1, minWidth: 0 } : { width: laneWidth };
+  const contentStyle = fill ? { width: "100%" } : { width: LABEL_W + laneWidth };
 
   const ticks: number[] = [];
   for (let t = 0, step = tickStep(pixelsPerSec); t <= duration + 0.001; t += step) {
@@ -124,7 +129,7 @@ export function Tracks({
     <div className="tracks">
       <div
         className="tracks__content"
-        style={{ width: LABEL_W + laneWidth }}
+        style={contentStyle}
         onPointerMove={onMove}
         onPointerUp={end}
         onPointerLeave={end}
@@ -132,7 +137,7 @@ export function Tracks({
         {/* Ruler */}
         <div className="tracks__row tracks__row--ruler">
           <div className="tracks__label" style={{ width: LABEL_W }} />
-          <div className="tracks__lane tracks__ruler" style={{ width: laneWidth }}>
+          <div className="tracks__lane tracks__ruler" style={laneStyle}>
             {ticks.map((t) => (
               <span key={t} className="tracks__tick" style={{ left: px(t) }}>
                 {fmt(t)}
@@ -145,12 +150,11 @@ export function Tracks({
         <div className="tracks__row">
           <div className="tracks__label" style={{ width: LABEL_W }}>
             <span className="tracks__label-name">VIDEO</span>
-            <span className="tracks__label-sub">{hasVideo ? fmt(duration) : "—"}</span>
           </div>
           <div
             ref={videoLaneRef}
             className="tracks__lane"
-            style={{ width: laneWidth }}
+            style={laneStyle}
             onPointerDown={(e) => hasVideo && begin(e, { kind: "seek" })}
           >
             {hasVideo ? (
@@ -167,16 +171,15 @@ export function Tracks({
           </div>
         </div>
 
-        {/* ZOOM */}
+        {/* EFFECTS (zoom) */}
         <div className="tracks__row">
           <div className="tracks__label" style={{ width: LABEL_W }}>
-            <span className="tracks__label-name">ZOOM</span>
-            <span className="tracks__label-sub">{zooms.length} block{zooms.length === 1 ? "" : "s"}</span>
+            <span className="tracks__label-name">EFFECTS</span>
           </div>
           <div
             ref={zoomLaneRef}
             className="tracks__lane"
-            style={{ width: laneWidth }}
+            style={laneStyle}
             onPointerDown={() => onSelectZoom(null)}
           >
             {zooms.map((z) => (
@@ -200,21 +203,21 @@ export function Tracks({
               </div>
             ))}
             {zooms.length === 0 && hasVideo && (
-              <span className="tracks__empty">Add a zoom from the Zoom tab</span>
+              <span className="tracks__empty">Add an effect from the Effects tab</span>
             )}
           </div>
         </div>
 
         {/* Placeholder audio lanes (the KindleWood audio port lands here). */}
         {[
-          { name: "SOUND EFFECTS", hint: "Sound effects — coming from the KindleWood audio port" },
-          { name: "MUSIC", hint: "Background music — coming from the KindleWood audio port" },
+          { name: "SOUND EFFECTS", hint: "Coming soon" },
+          { name: "MUSIC", hint: "Coming soon" },
         ].map((lane) => (
           <div className="tracks__row" key={lane.name}>
             <div className="tracks__label" style={{ width: LABEL_W }}>
               <span className="tracks__label-name">{lane.name}</span>
             </div>
-            <div className="tracks__lane tracks__lane--muted" style={{ width: laneWidth }}>
+            <div className="tracks__lane tracks__lane--muted" style={laneStyle}>
               <span className="tracks__empty">{lane.hint}</span>
             </div>
           </div>

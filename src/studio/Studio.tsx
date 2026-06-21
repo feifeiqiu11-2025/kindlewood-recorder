@@ -10,6 +10,7 @@ import { Tracks } from "./Tracks";
 import { FloatingControls } from "./FloatingControls";
 import { ActionBar } from "./ActionBar";
 import { dbToGain } from "./audio";
+import { ASPECTS, aspectCss, aspectDims, type Aspect } from "./aspect";
 import { SoundsIcon, MusicIcon, ZoomIcon } from "./icons";
 import "./Studio.css";
 
@@ -59,6 +60,7 @@ export function Studio() {
   const [exportError, setExportError] = useState<string | null>(null);
   const [pipWindow, setPipWindow] = useState<Window | null>(null);
   const [zoomLevel, setZoomLevel] = useState(1);
+  const [aspect, setAspect] = useState<Aspect>("16:9");
 
   const editing = !!cap.recording;
   const pixelsPerSec = BASE_PX_PER_SEC * zoomLevel;
@@ -246,6 +248,7 @@ export function Studio() {
         video: v,
         project,
         mimeType: cap.recording.mimeType,
+        output: aspectDims(aspect),
         onProgress: (f) => setExportPct(Math.round(f * 100)),
       });
       const ext = extensionForMimeType(cap.recording.mimeType);
@@ -340,7 +343,7 @@ export function Studio() {
   const tabs: RailTab[] = [
     { id: "sounds", icon: <SoundsIcon />, label: "Sounds", content: placeholder("A sound-effects library") },
     { id: "music", icon: <MusicIcon />, label: "Music", content: placeholder("A background-music library") },
-    { id: "zoom", icon: <ZoomIcon />, label: "Zoom", content: zoomPanel },
+    { id: "zoom", icon: <ZoomIcon />, label: "Effects", content: zoomPanel },
   ];
 
   return (
@@ -351,6 +354,19 @@ export function Studio() {
         <header className="studio__header">
           <h1 className="studio__title">KindleWood Recorder</h1>
           <div className="studio__header-actions">
+            <div className="segmented" role="group" aria-label="Aspect ratio">
+              {ASPECTS.map((a) => (
+                <button
+                  key={a}
+                  className={`segmented__btn${aspect === a ? " is-active" : ""}`}
+                  onClick={() => setAspect(a)}
+                  aria-pressed={aspect === a}
+                  title={`Frame ${a}`}
+                >
+                  {a}
+                </button>
+              ))}
+            </div>
             {editing && (
               <button className="btn" onClick={newRecording} disabled={exporting}>
                 New recording
@@ -375,7 +391,7 @@ export function Studio() {
         {/* Hidden source video used for editing/export. */}
         <video ref={videoRef} playsInline className="studio__source" />
 
-        <div className="stage">
+        <div className="stage" style={{ aspectRatio: aspectCss(aspect) }}>
           {editing ? (
             <canvas ref={canvasRef} className="stage__canvas" onPointerDown={onCanvasPointerDown} />
           ) : cap.displayStream ? (
@@ -406,9 +422,14 @@ export function Studio() {
                   {cap.countdown}
                 </div>
               )}
-              {cap.phase === "recording" && <div className="stage__rec">● REC</div>}
+              {cap.phase === "recording" && (
+                <div className="stage__rec">
+                  <span className="stage__rec-dot" />
+                  REC
+                </div>
+              )}
               {cap.phase === "paused" && (
-                <div className="stage__rec stage__rec--paused">❚❚ Paused</div>
+                <div className="stage__rec stage__rec--paused">Paused</div>
               )}
             </div>
           ) : (
