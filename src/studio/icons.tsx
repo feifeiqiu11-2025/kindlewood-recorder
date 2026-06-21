@@ -32,3 +32,46 @@ export const ZoomIcon = () => (
     <path d="M21 21l-4.3-4.3M11 8v6M8 11h6" />
   </svg>
 );
+
+const sm = { ...base, width: 16, height: 16 };
+
+export const PlayIcon = () => (
+  <svg {...sm}>
+    <path d="M6 4l14 8-14 8V4z" fill="currentColor" stroke="none" />
+  </svg>
+);
+
+export const PauseIcon = () => (
+  <svg {...sm}>
+    <rect x="6" y="5" width="4" height="14" fill="currentColor" stroke="none" />
+    <rect x="14" y="5" width="4" height="14" fill="currentColor" stroke="none" />
+  </svg>
+);
+
+export const ScissorsIcon = () => (
+  <svg {...sm}>
+    <circle cx="6" cy="6" r="3" />
+    <circle cx="6" cy="18" r="3" />
+    <path d="M20 4L8.12 15.88M14.47 14.48L20 20M8.12 8.12L12 12" />
+  </svg>
+);
+
+export const ZoomOutIcon = () => (
+  <svg {...sm}>
+    <circle cx="11" cy="11" r="7" />
+    <path d="M21 21l-4.3-4.3M8 11h6" />
+  </svg>
+);
+
+export const ZoomInIcon = () => (
+  <svg {...sm}>
+    <circle cx="11" cy="11" r="7" />
+    <path d="M21 21l-4.3-4.3M11 8v6M8 11h6" />
+  </svg>
+);
+
+export const TrashIcon = () => (
+  <svg {...sm}>
+    <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6" />
+  </svg>
+);

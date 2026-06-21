@@ -45,6 +45,8 @@ export const VideoProjectSchema = z.object({
   /** Audio settings. In v1 the mic track is baked into the recording. */
   audio: z.object({
     muted: z.boolean().default(false),
+    /** Playback gain in dB applied to the recording's audio (-30..+6). */
+    volumeDb: z.number().min(-30).max(6).default(0),
   }),
 });
 
@@ -57,6 +59,6 @@ export function emptyProject(sourceDurationSec: number): VideoProject {
     sourceDurationSec,
     trim: { startSec: 0, endSec: sourceDurationSec },
     zooms: [],
-    audio: { muted: false },
+    audio: { muted: false, volumeDb: 0 },
   };
 }

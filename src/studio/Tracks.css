@@ -1,10 +1,15 @@
 .tracks {
-  position: relative;
   width: 100%;
   border: 1px solid #e5e4ef;
   border-radius: 12px;
   background: #fff;
-  overflow: hidden;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.tracks__content {
+  position: relative;
+  min-width: 100%;
 }
 
 .tracks__row {
@@ -23,11 +28,19 @@
 
 .tracks__label {
   flex-shrink: 0;
+  position: sticky;
+  left: 0;
+  z-index: 2;
   display: flex;
   flex-direction: column;
   justify-content: center;
   padding: 0 0.75rem;
+  background: #fff;
   border-right: 1px solid #f0eff7;
+}
+
+.tracks__row--ruler .tracks__label {
+  background: #faf9ff;
 }
 
 .tracks__label-name {
@@ -45,8 +58,7 @@
 
 .tracks__lane {
   position: relative;
-  flex: 1;
-  min-width: 0;
+  flex: 0 0 auto;
   height: 52px;
   touch-action: none;
 }
@@ -178,7 +190,11 @@
   .tracks__label {
     border-color: #26263c;
   }
-  .tracks__row--ruler {
+  .tracks__label {
+    background: #1c1c2e;
+  }
+  .tracks__row--ruler,
+  .tracks__row--ruler .tracks__label {
     background: #20203a;
   }
   .tracks__label-name {

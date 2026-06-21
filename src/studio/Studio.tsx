@@ -8,10 +8,13 @@ import { exportVideo } from "../render/exportVideo";
 import { LeftRail, type RailTab } from "./LeftRail";
 import { Tracks } from "./Tracks";
 import { FloatingControls } from "./FloatingControls";
+import { ActionBar } from "./ActionBar";
+import { dbToGain } from "./audio";
 import { SoundsIcon, MusicIcon, ZoomIcon } from "./icons";
 import "./Studio.css";
 
 const MAX_PREVIEW_WIDTH = 1600;
+const BASE_PX_PER_SEC = 70;
 
 const clamp = (v: number, lo: number, hi: number) =>
   Math.max(lo, Math.min(hi, v));
@@ -55,8 +58,10 @@ export function Studio() {
   const [exportPct, setExportPct] = useState(0);
   const [exportError, setExportError] = useState<string | null>(null);
   const [pipWindow, setPipWindow] = useState<Window | null>(null);
+  const [zoomLevel, setZoomLevel] = useState(1);
 
   const editing = !!cap.recording;
+  const pixelsPerSec = BASE_PX_PER_SEC * zoomLevel;
 
   useEffect(() => {
     projectRef.current = project;
@@ -187,6 +192,35 @@ export function Studio() {
     if (selectedId === id) setSelectedId(null);
   };
 
+  // Split the selected zoom block at the playhead into two adjacent blocks.
+  const splitSelectedZoom = () => {
+    if (!project || !selectedId) return;
+    const z = project.zooms.find((b) => b.id === selectedId);
+    if (!z) return;
+    const t = currentTime;
+    if (t <= z.startSec + MIN_LEN || t >= z.endSec - MIN_LEN) return;
+    const left = { ...z, endSec: t };
+    const right = { ...z, id: crypto.randomUUID(), startSec: t };
+    setProject({
+      ...project,
+      zooms: project.zooms
+        .flatMap((b) => (b.id === z.id ? [left, right] : [b]))
+        .sort((a, b) => a.startSec - b.startSec),
+    });
+    setSelectedId(left.id);
+  };
+
+  const setVolumeDb = (db: number) =>
+    setProject((p) => (p ? { ...p, audio: { ...p.audio, volumeDb: db } } : p));
+
+  // Apply the Voice volume to preview playback (boost above 0dB is clamped by
+  // the media element; true gain in the export is a follow-up).
+  useEffect(() => {
+    if (videoRef.current && project) {
+      videoRef.current.volume = Math.min(1, dbToGain(project.audio.volumeDb));
+    }
+  }, [project?.audio.volumeDb, project]);
+
   const onCanvasPointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const id = selectedRef.current;
     const v = videoRef.current;
@@ -252,6 +286,15 @@ export function Studio() {
   };
 
   const selected = project?.zooms.find((z) => z.id === selectedId) ?? null;
+  const canSplit =
+    !!selected &&
+    currentTime > selected.startSec + MIN_LEN &&
+    currentTime < selected.endSec - MIN_LEN;
+  const splitTitle = selected
+    ? canSplit
+      ? "Split zoom at playhead"
+      : "Move the playhead inside the selected zoom to split"
+    : "Select a zoom block to split";
 
   const zoomPanel = (
     <div className="panel">
@@ -386,23 +429,32 @@ export function Studio() {
         />
 
         {/* Transport / record bar */}
-        <div className="bar">
-          {editing ? (
-            <>
-              <button className="btn" onClick={togglePlay}>
-                {playing ? "Pause" : "Play"}
-              </button>
-              <span className="bar__time">{fmt(currentTime)} / {fmt(duration)}</span>
-              <button className="btn" onClick={addZoom}>+ Add zoom</button>
-            </>
-          ) : (
+        {editing ? (
+          <ActionBar
+            playing={playing}
+            onTogglePlay={togglePlay}
+            canSplit={canSplit}
+            splitTitle={splitTitle}
+            onSplit={splitSelectedZoom}
+            zoomLevel={zoomLevel}
+            onZoomOut={() => setZoomLevel((z) => Math.max(0.25, z / 1.25))}
+            onZoomIn={() => setZoomLevel((z) => Math.min(4, z * 1.25))}
+            onResetZoom={() => setZoomLevel(1)}
+            volumeDb={project?.audio.volumeDb ?? 0}
+            onVolume={setVolumeDb}
+            canDelete={!!selectedId}
+            onDelete={() => selectedId && deleteZoom(selectedId)}
+          />
+        ) : (
+          <div className="bar">
             <RecordControls cap={cap} onStart={startRecording} />
-          )}
-        </div>
+          </div>
+        )}
 
         {project ? (
           <Tracks
             duration={duration}
+            pixelsPerSec={pixelsPerSec}
             currentTime={currentTime}
             trim={project.trim}
             zooms={project.zooms}
@@ -416,6 +468,7 @@ export function Studio() {
         ) : (
           <Tracks
             duration={1}
+            pixelsPerSec={pixelsPerSec}
             currentTime={0}
             trim={{ startSec: 0, endSec: 1 }}
             zooms={[]}
