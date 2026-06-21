@@ -78,6 +78,7 @@ type Props = {
   tpFontSize: number;
   tpResetKey: number;
   onTpToggle: () => void;
+  onTpRestart: () => void;
   onTpSpeed: (v: number) => void;
   onTpFont: (v: number) => void;
 };
@@ -145,6 +146,9 @@ function Body(props: Props) {
           <div style={S.tpRow}>
             <button style={S.btn} onClick={props.onTpToggle}>
               {props.tpPlaying ? "Pause scroll" : "Start scroll"}
+            </button>
+            <button style={S.btn} onClick={props.onTpRestart}>
+              Restart
             </button>
             <label style={S.slider}>
               Speed

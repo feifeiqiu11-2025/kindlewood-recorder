@@ -64,7 +64,7 @@ export function Studio() {
   // Teleprompter (presenter aid — never recorded or exported).
   const [script, setScript] = useState("");
   const [tpPlaying, setTpPlaying] = useState(true);
-  const [tpSpeed, setTpSpeed] = useState(45);
+  const [tpSpeed, setTpSpeed] = useState(22);
   const [tpFontSize, setTpFontSize] = useState(26);
   const [tpResetKey, setTpResetKey] = useState(0);
 
@@ -606,6 +606,10 @@ export function Studio() {
           tpFontSize={tpFontSize}
           tpResetKey={tpResetKey}
           onTpToggle={() => setTpPlaying((p) => !p)}
+          onTpRestart={() => {
+            setTpResetKey((k) => k + 1);
+            setTpPlaying(true);
+          }}
           onTpSpeed={setTpSpeed}
           onTpFont={setTpFontSize}
         />
