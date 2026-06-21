@@ -1,8 +1,30 @@
 {
   "name": "kindlewood-recorder",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0",
+  "description": "A minimal, browser-based screen recorder with click-to-zoom editing, camera overlay, and a ripple timeline — no install.",
   "type": "module",
+  "license": "MIT",
+  "author": "Feifei Qiu",
+  "homepage": "https://github.com/feifeiqiu11-2025/kindlewood-recorder#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/feifeiqiu11-2025/kindlewood-recorder.git"
+  },
+  "bugs": {
+    "url": "https://github.com/feifeiqiu11-2025/kindlewood-recorder/issues"
+  },
+  "keywords": [
+    "screen-recorder",
+    "screen-capture",
+    "video-editor",
+    "zoom",
+    "getdisplaymedia",
+    "mediarecorder",
+    "react",
+    "vite",
+    "browser"
+  ],
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",

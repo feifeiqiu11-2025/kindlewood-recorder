@@ -1,59 +1,69 @@
-# KindleWood Recorder — Design Doc
+# KindleWood Recorder — Design
 
-A minimal, browser-based screen recorder with manual click-to-zoom editing.
-Think "Descript / Screen Studio, but simple and web-only." Standalone project —
+A minimal, browser-based screen recorder with click-to-zoom editing.
+Think "Screen Studio / Descript, but simple and web-only." Standalone project —
 publishable on its own, and embeddable into KindleWood Studio later.
 
-Status: **v1 design approved, scaffolding in progress.**
+Status: **working v1.**
 
 ---
 
 ## Goals
 
-- Record a screen / window / browser tab in the browser (no install).
-- Optional microphone audio.
-- Edit: trim start/end, and add **manual zoom blocks** — pin a focus point and a
-  zoom level over a time window; smooth eased zoom in/out.
-- Export a finished MP4/WebM (download in v1).
-- Ship as its own repo. KindleWood can consume the output later via a simple contract.
+- Record a screen / window / browser tab in the browser (no install), with
+  optional microphone and webcam overlay.
+- Edit on a **ripple timeline**: split, delete (gaps close), trim.
+- Add **manual zoom effects** by placing a target box over the preview.
+- Pick an output aspect ratio (16:9 / 9:16 / 1:1) and export a finished video.
+- Ship as its own repo; KindleWood can consume the output later via a simple contract.
 
-## Non-Goals (explicitly cut from v1)
+## Non-goals (deliberately out of scope)
 
-- **Automatic** zoom-on-click. Requires OS-level global mouse hooks (native app).
-  Out of scope; manual zoom blocks replace it.
-- Webcam picture-in-picture overlay → **v2** (additive overlay, easy to add later).
-- Multi-clip timeline, transitions, captions, cursor smoothing, background padding.
-- Server-side render pipeline → only if canvas export quality proves insufficient.
+- **Automatic** zoom-on-click. Reading global mouse clicks outside the tab needs
+  OS-level hooks (a native app). Manual zoom target boxes replace it.
+- Captions, cursor smoothing, transitions, multi-track audio (planned, not v1).
+- Server-side rendering. Export is done client-side on a `<canvas>`.
 
 ---
 
 ## Why browser-only
 
-The browser's `getDisplayMedia()` captures pixels of any screen/window/tab,
-including desktop apps. What the browser **cannot** do is read mouse-click
-coordinates outside its own tab (OS sandbox) — that is the only reason
-auto-zoom-on-click needs a native app. By making zoom **manual** (pin a spot in
-the editor), we remove the only hard dependency and stay 100% in the browser.
+`getDisplayMedia()` captures pixels of any screen/window/tab, including desktop
+apps. What the browser **cannot** do is read mouse-click coordinates outside its
+own tab (OS sandbox) — the only reason auto-zoom-on-click usually needs a native
+app. Making zoom **manual** removes that hard dependency and keeps us 100% in the
+browser.
 
 | Capability | Own tab | Any window / full screen |
 |---|---|---|
 | Record video (pixels) | Yes | Yes |
 | Auto-zoom on click | Yes | No (needs native) — **cut** |
-| Manual zoom block | Yes | Yes — **our approach** |
+| Manual zoom target | Yes | Yes — **our approach** |
 
 ---
 
 ## Core concept: zoom is a transform
 
-The whole differentiator reduces to one idea:
+A **zoom block** = `{ startSec, endSec, focusX, focusY, scale, easeSec }`. During
+preview and export, each frame is drawn to a `<canvas>` as a **source crop**: at
+scale `s` we sample a region of size `(W/s, H/s)` centered on the focus point and
+stretch it to fill the output, eased in/out across the block. The same math runs
+for live preview and final export, so what you see is what you get
+([render/zoom.ts](src/render/zoom.ts), [render/renderFrame.ts](src/render/renderFrame.ts)).
 
-> A **zoom block** = `{ startSec, endSec, focusX, focusY, scale }`.
-> It is a clip on a timeline track. During preview and export, each video frame
-> is drawn to a `<canvas>` with a scale + translate centered on `(focusX, focusY)`,
-> eased in at `startSec` and eased out toward `endSec`.
+---
 
-Everything else (capture, trim, mic) is standard browser media APIs. The zoom
-renderer is the only genuinely new code.
+## The ripple timeline
+
+The editor timeline is a **ripple sequence**: kept **segments** play back-to-back.
+A segment references a SOURCE range (`sourceStart`/`sourceEnd`); its TIMELINE
+position is the cumulative duration of the segments before it. So deleting a clip
+closes the gap automatically and the remaining video starts at 0.
+
+- Playback and export map timeline ⇄ source via helpers in
+  [types/project.ts](src/types/project.ts) (`timelineToSource`, `sourceToTimeline`,
+  `segmentAtSource`).
+- Zoom block times are in **timeline** seconds, so they stay aligned to the output.
 
 ---
 
@@ -61,87 +71,91 @@ renderer is the only genuinely new code.
 
 ```
 src/
-├─ record/        # capture: getDisplayMedia + optional getUserMedia, MediaRecorder → raw blob
-├─ editor/        # timeline UI (ported), zoom-block track, focus-point picker, preview <canvas>
-├─ render/        # frame-by-frame zoom renderer; canvas → MediaRecorder export
-└─ types/         # VideoLayers / ZoomBlock Zod schemas (the portable edit manifest)
+├─ record/   # capture state machine + MediaRecorder
+│   ├─ recording.ts            # codec negotiation, stream composition, download
+│   └─ useCaptureController.ts # idle→ready→countdown→recording⇄paused→stopped; camera PiP compositing
+├─ render/   # pure rendering & encoding (framework-agnostic)
+│   ├─ zoom.ts                 # eased zoom lookup at a timeline time
+│   ├─ renderFrame.ts          # crop-based zoom draw
+│   └─ exportVideo.ts          # real-time canvas re-render → MediaRecorder
+├─ studio/   # editor UI
+│   ├─ Studio.tsx              # workspace composition + editor state
+│   ├─ Tracks.tsx              # multi-lane ripple timeline
+│   ├─ ActionBar.tsx           # play / split / zoom / volume / delete
+│   ├─ ZoomTargetOverlay.tsx   # draggable/resizable zoom target box
+│   ├─ FloatingControls.tsx    # Document PiP + in-page fallback
+│   ├─ LeftRail.tsx            # icon strip + panels (Sounds/Music/Effects)
+│   ├─ aspect.ts / stageGeometry.ts / audio.ts
+│   └─ icons.tsx
+└─ types/
+    └─ project.ts              # VideoProject Zod schema + timeline/source helpers
 ```
 
 Data flow: **record → raw blob + `VideoProject` manifest → editor mutates manifest
-→ render walks manifest to produce final video.** The manifest is the portable
+→ export walks manifest to produce the final video.** The manifest is the portable
 artifact KindleWood can later import.
 
 ### Tech stack
 
-- **Vite + React 19 + TypeScript** — single-page tool, no SSR needed.
-- **Zod** — manifest validation (mirrors KindleWood's `layers.types.ts` style).
+- **Vite + React 19 + TypeScript** — single-page tool, no SSR.
+- **Zod** — manifest validation.
 - Browser media APIs: `getDisplayMedia`, `getUserMedia`, `MediaRecorder`,
-  `<canvas>` 2D, `requestVideoFrameCallback`.
-- (Later, if needed) `ffmpeg.wasm` for higher-quality export.
+  `<canvas>` 2D, Document Picture-in-Picture.
 
 ---
 
-## Reused from KindleWood (ported, not imported)
-
-Reimplemented here so this repo stays independently shippable — no shared package,
-no coupling. Source references in the KindleWood codebase:
-
-| Ported piece | KindleWood source (reference only) |
-|---|---|
-| Timeline clip track (drag / trim / 0.1s snap) | `components/audio/SFXTimeline.tsx` |
-| Track row + ruler layout | `components/audio/TimelineLayout.tsx` |
-| Trim region interaction | `components/audio/WaveformTrimmer.tsx` |
-| Mix-time / source-offset math | `lib/audio/segment-time.ts` |
-| Versioned Zod layers schema pattern | `lib/audio/layers.types.ts` |
-| Upload + encode pipeline shape (later) | `lib/audio/upload-recording.service.ts`, `mix.service.ts` |
-
-**The existing KindleWood codebase is not modified.** We only read it as reference.
-
----
-
-## The edit manifest (v1 shape)
+## The edit manifest
 
 ```ts
+type Segment = { id: string; sourceStart: number; sourceEnd: number };
+
 type ZoomBlock = {
   id: string;
-  startSec: number;
+  startSec: number;   // timeline time
   endSec: number;
-  focusX: number;   // 0..1, fraction of frame width
-  focusY: number;   // 0..1, fraction of frame height
-  scale: number;    // e.g. 1.5–2.5
-  easeSec: number;  // ramp in/out duration
+  focusX: number;     // 0..1 of frame width
+  focusY: number;     // 0..1 of frame height
+  scale: number;      // 1..5
+  easeSec: number;    // ramp in/out
 };
 
 type VideoProject = {
   version: 1;
   sourceDurationSec: number;
-  trim: { startSec: number; endSec: number };
+  segments: Segment[]; // ripple timeline (played in order)
   zooms: ZoomBlock[];
-  audio: { muted: boolean };   // mic baked into the recording in v1
+  audio: { muted: boolean; volumeDb: number };
 };
 ```
 
----
-
-## Build plan (phased, each shippable)
-
-1. **Capture** — source picker, optional mic, record → raw blob, download. Proves the foundation.
-2. **Trim + preview** — port timeline, play raw recording, trim start/end.
-3. **Zoom blocks** — add/drag/resize blocks, pin focus on preview, eased zoom in preview. The differentiator.
-4. **Export** — canvas re-render → `MediaRecorder` → MP4/WebM download.
-5. **Audio polish** — surface mic track; optional SFX overlay (port from KindleWood).
-
-## Future (post-v1)
-
-- Webcam PiP overlay.
-- Drop-into-KindleWood: upload the final video + manifest via a small import contract.
-- Server FFmpeg render for higher fidelity / larger files.
-- Optional native click-helper to re-enable *automatic* zoom across desktop apps.
+Output aspect ratio and camera shape are session/UI state, applied at export time
+rather than stored on the manifest.
 
 ---
 
-## Open questions
+## Export
 
-- Export container: WebM is native to `MediaRecorder`; MP4 may need `ffmpeg.wasm`.
-  v1 ships whatever `MediaRecorder` supports; revisit if MP4 is required.
-- Max recording length before memory pressure (chunked recording handles this).
+Real-time approach: play the kept segments through once, draw each frame to an
+offscreen canvas with the zoom transform (letterboxed into the chosen aspect
+ratio), and capture the canvas stream + the source audio via `MediaRecorder`.
+Output is 1080p WebM at a healthy bitrate. An **MP4 (H.264 + AAC)** path via
+`ffmpeg.wasm` is planned for platforms that don't accept WebM (X, CapCut).
+
+---
+
+## Reused from KindleWood (ported, not imported)
+
+The DAW-style layout pattern (left rail, track rows + ruler, transport bar) is
+**reimplemented** here from KindleWood's audio editor so this repo stays
+independently shippable — no shared package, no coupling. The existing KindleWood
+codebase is not modified; it was only read as reference.
+
+---
+
+## Known trade-offs
+
+- Export is **real-time** (a clip takes ~its own length to render). A server-side
+  or WebCodecs path could make it faster than real-time later.
+- Output is **WebM** until the ffmpeg.wasm MP4 path lands.
+- Camera is **baked** into the recording (composited at capture) rather than a
+  separate movable track.
