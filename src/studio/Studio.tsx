@@ -225,25 +225,21 @@ export function Studio() {
     }
   };
 
-  // Opened from the Start click (a user gesture, required by the DPiP API),
-  // then the countdown + recording begin.
-  const startRecording = async () => {
+  // Opened from the Start click (a user gesture, required by the DPiP API).
+  // Fire-and-forget so the PiP window never blocks or derails recording — the
+  // in-page floating bar covers the case where it fails or is unsupported.
+  const startRecording = () => {
     const dpip = (window as unknown as { documentPictureInPicture?: { requestWindow: (o: { width: number; height: number }) => Promise<Window> } }).documentPictureInPicture;
-    if (dpip?.requestWindow) {
-      try {
-        const w = await dpip.requestWindow({ width: 300, height: 92 });
-        w.document.body.style.margin = "0";
-        w.document.body.style.display = "flex";
-        w.document.body.style.alignItems = "center";
-        w.document.body.style.justifyContent = "center";
-        w.document.body.style.background = "#16161f";
+    dpip
+      ?.requestWindow({ width: 300, height: 92 })
+      .then((w) => {
+        w.document.body.style.cssText =
+          "margin:0;display:flex;align-items:center;justify-content:center;background:#16161f";
         w.document.title = "Recording";
         w.addEventListener("pagehide", () => setPipWindow(null));
         setPipWindow(w);
-      } catch {
-        // DPiP denied/unsupported — the in-page floating bar covers it.
-      }
-    }
+      })
+      .catch(() => {});
     cap.arm();
   };
 

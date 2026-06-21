@@ -132,9 +132,18 @@ export function useCaptureController() {
   const beginRecording = useCallback(() => {
     const mimeType = pickSupportedMimeType();
     const display = displayRef.current;
-    if (!mimeType || !display) {
-      setError("Recording is not supported in this browser.");
+    const hasLiveVideo =
+      !!display && display.getVideoTracks().some((t) => t.readyState === "live");
+    if (!mimeType) {
+      setError("This browser can't record video (no supported codec).");
       setPhase("idle");
+      cleanupStreams();
+      return;
+    }
+    if (!display || !hasLiveVideo) {
+      setError("The screen share ended before recording started. Please try again.");
+      setPhase("idle");
+      cleanupStreams();
       return;
     }
     mimeRef.current = mimeType;
@@ -146,8 +155,12 @@ export function useCaptureController() {
     if (settings.camera && cameraRef.current) {
       const track = display.getVideoTracks()[0];
       const s = track.getSettings();
-      const W = s.width ?? 1280;
-      const H = s.height ?? 720;
+      const srcW = s.width ?? 1280;
+      const srcH = s.height ?? 720;
+      // Cap composite resolution to bound memory on large/Retina captures.
+      const cscale = Math.min(1, 1920 / srcW);
+      const W = Math.round(srcW * cscale);
+      const H = Math.round(srcH * cscale);
       const canvas = document.createElement("canvas");
       canvas.width = W;
       canvas.height = H;
@@ -210,7 +223,7 @@ export function useCaptureController() {
     startTick();
     recorder.start(1000);
     setPhase("recording");
-  }, [settings.camera, finalize, startTick]);
+  }, [settings.camera, finalize, startTick, cleanupStreams]);
 
   const stopOrCancelRef = useRef<() => void>(() => {});
 
