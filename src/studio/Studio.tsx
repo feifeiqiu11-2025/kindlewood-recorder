@@ -57,7 +57,7 @@ export function Studio() {
   const [exportPct, setExportPct] = useState(0);
   const [exportStage, setExportStage] = useState<"render" | "convert">("render");
   const [exportError, setExportError] = useState<string | null>(null);
-  const [format, setFormat] = useState<"mp4" | "webm">("mp4");
+  const [format, setFormat] = useState<"mp4" | "webm">("webm");
   const [recovered, setRecovered] = useState<StoredRecording | null>(null);
   const [pipWindow, setPipWindow] = useState<Window | null>(null);
   const [zoomLevel, setZoomLevel] = useState(1);
@@ -509,14 +509,14 @@ export function Studio() {
               </button>
             )}
             <div className="segmented" role="group" aria-label="Export format">
-              {(["mp4", "webm"] as const).map((f) => (
+              {(["webm", "mp4"] as const).map((f) => (
                 <button
                   key={f}
                   className={`segmented__btn${format === f ? " is-active" : ""}`}
                   onClick={() => setFormat(f)}
                   aria-pressed={format === f}
                   disabled={exporting}
-                  title={f === "mp4" ? "H.264 MP4 — works on X, CapCut, everywhere" : "WebM — fast, great for YouTube"}
+                  title={f === "mp4" ? "H.264 MP4 — works on X, CapCut; slower, heavier" : "WebM — fast and reliable, great for YouTube"}
                 >
                   {f.toUpperCase()}
                 </button>
