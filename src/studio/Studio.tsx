@@ -72,35 +72,27 @@ export function Studio() {
   }, [cap.cameraStream]);
 
   // When a recording lands, load it into the editor.
+  // MediaRecorder WebM blobs report duration = Infinity (no duration in the
+  // live-stream header). Rather than the risky seek-to-1e7 hack (which can
+  // OOM-crash the renderer), fall back to the wall-clock duration the capture
+  // controller already measured.
   useEffect(() => {
     const rec = cap.recording;
     const v = videoRef.current;
     if (!rec || !v) return;
     v.src = rec.url;
     setActiveTab("zoom");
-    const finish = (d: number) => {
-      setDuration(d);
-      setProject(emptyProject(d));
+    const init = () => {
+      const d =
+        isFinite(v.duration) && v.duration > 0 ? v.duration : rec.durationSec;
+      const safe = Math.max(0.1, d);
+      setDuration(safe);
+      setProject(emptyProject(safe));
       setCurrentTime(0);
     };
-    const onMeta = () => {
-      if (!isFinite(v.duration) || v.duration === 0) {
-        const onTU = () => {
-          if (isFinite(v.duration) && v.duration > 0) {
-            v.removeEventListener("timeupdate", onTU);
-            v.currentTime = 0;
-            finish(v.duration);
-          }
-        };
-        v.addEventListener("timeupdate", onTU);
-        v.currentTime = 1e7;
-      } else {
-        finish(v.duration);
-      }
-    };
-    v.addEventListener("loadedmetadata", onMeta);
-    if (v.readyState >= 1) onMeta();
-    return () => v.removeEventListener("loadedmetadata", onMeta);
+    v.addEventListener("loadedmetadata", init);
+    if (v.readyState >= 1) init();
+    return () => v.removeEventListener("loadedmetadata", init);
   }, [cap.recording]);
 
   // Editor draw loop: keep the preview canvas synced with the video + edits.
