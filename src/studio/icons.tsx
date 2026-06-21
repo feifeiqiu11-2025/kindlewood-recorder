@@ -33,6 +33,13 @@ export const ZoomIcon = () => (
   </svg>
 );
 
+export const ScriptIcon = () => (
+  <svg {...base}>
+    <path d="M4 4h12a2 2 0 0 1 2 2v14l-3-2-3 2-3-2-3 2V6a2 2 0 0 1 1-2z" />
+    <path d="M8 8h6M8 12h6" />
+  </svg>
+);
+
 const sm = { ...base, width: 16, height: 16 };
 
 export const PlayIcon = () => (

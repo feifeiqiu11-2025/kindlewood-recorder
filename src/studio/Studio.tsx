@@ -15,16 +15,17 @@ import { zoomAt } from "../render/zoom";
 import { exportVideo } from "../render/exportVideo";
 import { LeftRail, type RailTab } from "./LeftRail";
 import { Tracks } from "./Tracks";
-import { FloatingControls } from "./FloatingControls";
+import { PresenterOverlay } from "./PresenterOverlay";
+import { ScriptPanel } from "./ScriptPanel";
 import { ActionBar } from "./ActionBar";
 import { dbToGain } from "./audio";
 import { ASPECTS, aspectCss, aspectDims, type Aspect } from "./aspect";
 import { ZoomTargetOverlay } from "./ZoomTargetOverlay";
 import { focusFromClient } from "./stageGeometry";
+import { SoundsIcon, MusicIcon, ZoomIcon, ScriptIcon } from "./icons";
+import "./Studio.css";
 
 const aspectNum = (a: Aspect) => (a === "16:9" ? 16 / 9 : a === "9:16" ? 9 / 16 : 1);
-import { SoundsIcon, MusicIcon, ZoomIcon } from "./icons";
-import "./Studio.css";
 
 const MAX_PREVIEW_WIDTH = 1600;
 const BASE_PX_PER_SEC = 70;
@@ -59,6 +60,13 @@ export function Studio() {
   const [pipWindow, setPipWindow] = useState<Window | null>(null);
   const [zoomLevel, setZoomLevel] = useState(1);
   const [aspect, setAspect] = useState<Aspect>("16:9");
+
+  // Teleprompter (presenter aid — never recorded or exported).
+  const [script, setScript] = useState("");
+  const [tpPlaying, setTpPlaying] = useState(true);
+  const [tpSpeed, setTpSpeed] = useState(45);
+  const [tpFontSize, setTpFontSize] = useState(26);
+  const [tpResetKey, setTpResetKey] = useState(0);
 
   const editing = !!cap.recording;
   const pixelsPerSec = BASE_PX_PER_SEC * zoomLevel;
@@ -357,17 +365,19 @@ export function Studio() {
   // Fire-and-forget so the PiP window never blocks or derails recording — the
   // in-page floating bar covers the case where it fails or is unsupported.
   const startRecording = () => {
+    const hasScript = script.trim().length > 0;
     const dpip = (window as unknown as { documentPictureInPicture?: { requestWindow: (o: { width: number; height: number }) => Promise<Window> } }).documentPictureInPicture;
     dpip
-      ?.requestWindow({ width: 300, height: 92 })
+      ?.requestWindow(hasScript ? { width: 460, height: 340 } : { width: 300, height: 96 })
       .then((w) => {
-        w.document.body.style.cssText =
-          "margin:0;display:flex;align-items:center;justify-content:center;background:#16161f";
-        w.document.title = "Recording";
+        w.document.body.style.cssText = "margin:0;background:#16161f";
+        w.document.title = hasScript ? "Teleprompter" : "Recording";
         w.addEventListener("pagehide", () => setPipWindow(null));
         setPipWindow(w);
       })
       .catch(() => {});
+    setTpResetKey((k) => k + 1);
+    setTpPlaying(true);
     cap.arm();
   };
 
@@ -441,6 +451,7 @@ export function Studio() {
   );
 
   const tabs: RailTab[] = [
+    { id: "script", icon: <ScriptIcon />, label: "Script", content: <ScriptPanel value={script} onChange={setScript} /> },
     { id: "sounds", icon: <SoundsIcon />, label: "Sounds", content: placeholder("A sound-effects library") },
     { id: "music", icon: <MusicIcon />, label: "Music", content: placeholder("A background-music library") },
     { id: "zoom", icon: <ZoomIcon />, label: "Effects", content: zoomPanel },
@@ -499,6 +510,16 @@ export function Studio() {
             </button>
           </div>
         </header>
+
+        {cap.displaySurface === "monitor" &&
+          script.trim().length > 0 &&
+          ["ready", "countdown", "recording", "paused"].includes(cap.phase) && (
+            <div className="studio__warn" role="status">
+              You’re sharing your entire screen, so the teleprompter window will
+              be visible in the recording. Share a window or tab instead to keep
+              it hidden.
+            </div>
+          )}
 
         {(cap.error || exportError) && (
           <div className="studio__error" role="alert">
@@ -569,7 +590,7 @@ export function Studio() {
           )}
         </div>
 
-        <FloatingControls
+        <PresenterOverlay
           target={pipWindow}
           phase={cap.phase}
           countdown={cap.countdown}
@@ -577,6 +598,14 @@ export function Studio() {
           onPause={cap.pause}
           onResume={cap.resume}
           onStop={cap.stop}
+          script={script}
+          tpPlaying={tpPlaying}
+          tpSpeed={tpSpeed}
+          tpFontSize={tpFontSize}
+          tpResetKey={tpResetKey}
+          onTpToggle={() => setTpPlaying((p) => !p)}
+          onTpSpeed={setTpSpeed}
+          onTpFont={setTpFontSize}
         />
 
         {/* Transport / record bar */}

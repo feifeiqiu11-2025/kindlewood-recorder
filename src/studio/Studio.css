@@ -87,6 +87,15 @@
   font-size: 0.9rem;
 }
 
+.studio__warn {
+  padding: 0.6rem 0.9rem;
+  border-radius: 10px;
+  background: #fff7e6;
+  color: #92600a;
+  border: 1px solid #f3d79b;
+  font-size: 0.9rem;
+}
+
 /* Stage / preview — sized by height so tall ratios (9:16) stay centered
    and don't blow out the layout. aspect-ratio is set inline. */
 .stage {

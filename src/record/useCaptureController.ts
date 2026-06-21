@@ -72,6 +72,9 @@ export function useCaptureController() {
   const [countdown, setCountdown] = useState(0);
   const [displayStream, setDisplayStream] = useState<MediaStream | null>(null);
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
+  // 'monitor' | 'window' | 'browser' — used to warn that an on-screen overlay
+  // (teleprompter) would be captured when sharing the whole screen.
+  const [displaySurface, setDisplaySurface] = useState<string | null>(null);
 
   const phaseRef = useRef<CapturePhase>("idle");
   const displayRef = useRef<MediaStream | null>(null);
@@ -121,6 +124,7 @@ export function useCaptureController() {
     cancelAnimationFrame(compRafRef.current);
     setDisplayStream(null);
     setCameraStream(null);
+    setDisplaySurface(null);
   }, []);
 
   const finalize = useCallback(() => {
@@ -275,7 +279,11 @@ export function useCaptureController() {
       });
       displayRef.current = display;
       setDisplayStream(display);
-      display.getVideoTracks()[0]?.addEventListener("ended", () => {
+      const track = display.getVideoTracks()[0];
+      setDisplaySurface(
+        (track?.getSettings() as { displaySurface?: string } | undefined)?.displaySurface ?? null,
+      );
+      track?.addEventListener("ended", () => {
         stopOrCancelRef.current();
       });
 
@@ -403,6 +411,7 @@ export function useCaptureController() {
     countdown,
     displayStream,
     cameraStream,
+    displaySurface,
     setup,
     arm,
     pause,
