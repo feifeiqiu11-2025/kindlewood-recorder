@@ -1,0 +1,263 @@
+.studio {
+  display: flex;
+  height: 100svh;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color: #1a1a2e;
+}
+
+.studio__main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 1rem 1.25rem;
+  gap: 0.85rem;
+  overflow-y: auto;
+}
+
+.studio__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.studio__title {
+  margin: 0;
+  font-size: 1.15rem;
+}
+
+.studio__header-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.studio__source {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+  left: -9999px;
+}
+
+.studio__error {
+  padding: 0.6rem 0.9rem;
+  border-radius: 10px;
+  background: #fdecef;
+  color: #b3253f;
+  border: 1px solid #f5c2cd;
+  font-size: 0.9rem;
+}
+
+/* Stage / preview */
+.stage {
+  position: relative;
+  width: 100%;
+  background: #000;
+  border-radius: 12px;
+  overflow: hidden;
+  aspect-ratio: 16 / 9;
+  max-height: 52vh;
+}
+
+.stage__live,
+.stage__canvas {
+  width: 100%;
+  height: 100%;
+}
+
+.stage__canvas {
+  display: block;
+  object-fit: contain;
+  background: #000;
+}
+
+.stage__live {
+  position: relative;
+}
+
+.stage__pip {
+  position: absolute;
+  right: 2.5%;
+  bottom: 2.5%;
+  width: 22%;
+  border-radius: 12px;
+  border: 2px solid rgba(255, 255, 255, 0.9);
+  object-fit: cover;
+  background: #222;
+}
+
+.stage__pip.is-hidden {
+  display: none;
+}
+
+.stage__placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #9a9ab8;
+}
+
+.stage__countdown {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 7rem;
+  font-weight: 800;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.35);
+  text-shadow: 0 4px 24px rgba(0, 0, 0, 0.6);
+}
+
+.stage__rec {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(226, 61, 91, 0.92);
+  color: #fff;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.stage__rec--paused {
+  background: rgba(80, 80, 110, 0.92);
+}
+
+/* Transport / record bar */
+.bar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.bar__time {
+  font-variant-numeric: tabular-nums;
+  color: #4a4a63;
+  font-weight: 600;
+}
+
+.bar__hint {
+  color: #6a6a82;
+  font-size: 0.9rem;
+}
+
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 40px;
+  cursor: pointer;
+}
+
+/* Buttons */
+.btn {
+  min-height: 40px;
+  padding: 0 0.95rem;
+  border: 1px solid #d4d3e3;
+  border-radius: 9px;
+  background: #fff;
+  color: #1a1a2e;
+  font-size: 0.92rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn:hover:not(:disabled) {
+  background: #f4f4fb;
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.btn--sm {
+  min-height: 32px;
+  padding: 0 0.6rem;
+  font-size: 0.82rem;
+}
+
+.btn--primary {
+  background: #5b3df5;
+  border-color: #5b3df5;
+  color: #fff;
+}
+
+.btn--primary:hover:not(:disabled) {
+  background: #4c30d8;
+}
+
+.btn--rec {
+  background: #e23d5b;
+  border-color: #e23d5b;
+  color: #fff;
+}
+
+.btn--rec:hover:not(:disabled) {
+  background: #c8324d;
+}
+
+.btn--danger {
+  border-color: #e23d5b;
+  color: #e23d5b;
+  background: #fff;
+}
+
+/* Left-rail panels */
+.panel__add {
+  width: 100%;
+  margin-bottom: 1rem;
+}
+
+.panel__zoom-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+}
+
+.field {
+  display: grid;
+  grid-template-columns: 3.5rem 2.8rem 1fr;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.6rem;
+  font-size: 0.85rem;
+}
+
+.field input[type="range"] {
+  width: 100%;
+}
+
+.hint {
+  color: #6a6a82;
+  font-size: 0.85rem;
+  margin: 0.25rem 0 0;
+  line-height: 1.4;
+}
+
+@media (prefers-color-scheme: dark) {
+  .studio {
+    color: #ececf5;
+  }
+  .btn {
+    background: #21213a;
+    border-color: #34344f;
+    color: #ececf5;
+  }
+  .btn:hover:not(:disabled) {
+    background: #2a2a48;
+  }
+  .bar__time {
+    color: #c2c2da;
+  }
+}
