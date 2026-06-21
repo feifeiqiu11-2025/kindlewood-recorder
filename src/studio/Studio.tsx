@@ -365,7 +365,7 @@ export function Studio() {
           const ext = extensionForMimeType(cap.recording.mimeType);
           downloadBlob(webm, `kindlewood-edit-${stamp}.${ext}`);
           setExportError(
-            "MP4 conversion failed (often memory on a long clip) — downloaded WebM instead. Try a shorter clip for MP4.",
+            `MP4 conversion failed — downloaded WebM instead. (${convErr instanceof Error ? convErr.message : String(convErr)})`,
           );
         }
       } else {
