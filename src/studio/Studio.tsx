@@ -53,7 +53,9 @@ export function Studio() {
   const [activeTab, setActiveTab] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const [exportPct, setExportPct] = useState(0);
+  const [exportStage, setExportStage] = useState<"render" | "convert">("render");
   const [exportError, setExportError] = useState<string | null>(null);
+  const [format, setFormat] = useState<"mp4" | "webm">("mp4");
   const [pipWindow, setPipWindow] = useState<Window | null>(null);
   const [zoomLevel, setZoomLevel] = useState(1);
   const [aspect, setAspect] = useState<Aspect>("16:9");
@@ -313,20 +315,32 @@ export function Studio() {
     setExportError(null);
     setExporting(true);
     setExportPct(0);
+    setExportStage("render");
     exportingRef.current = true;
     v.pause();
     setPlaying(false);
     try {
-      const blob = await exportVideo({
+      const webm = await exportVideo({
         video: v,
         project,
         mimeType: cap.recording.mimeType,
         output: aspectDims(aspect),
         onProgress: (f) => setExportPct(Math.round(f * 100)),
       });
-      const ext = extensionForMimeType(cap.recording.mimeType);
       const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
-      downloadBlob(blob, `kindlewood-edit-${stamp}.${ext}`);
+      if (format === "mp4") {
+        setExportStage("convert");
+        setExportPct(0);
+        // Lazy-load ffmpeg.wasm so it never bloats the normal bundle.
+        const { transcodeToMp4 } = await import("../render/transcodeMp4");
+        const mp4 = await transcodeToMp4(webm, {
+          onProgress: (f) => setExportPct(Math.round(f * 100)),
+        });
+        downloadBlob(mp4, `kindlewood-edit-${stamp}.mp4`);
+      } else {
+        const ext = extensionForMimeType(cap.recording.mimeType);
+        downloadBlob(webm, `kindlewood-edit-${stamp}.${ext}`);
+      }
     } catch (err) {
       console.error("Export failed:", err);
       setExportError(
@@ -458,12 +472,30 @@ export function Studio() {
                 New recording
               </button>
             )}
+            <div className="segmented" role="group" aria-label="Export format">
+              {(["mp4", "webm"] as const).map((f) => (
+                <button
+                  key={f}
+                  className={`segmented__btn${format === f ? " is-active" : ""}`}
+                  onClick={() => setFormat(f)}
+                  aria-pressed={format === f}
+                  disabled={exporting}
+                  title={f === "mp4" ? "H.264 MP4 — works on X, CapCut, everywhere" : "WebM — fast, great for YouTube"}
+                >
+                  {f.toUpperCase()}
+                </button>
+              ))}
+            </div>
             <button
               className="btn btn--primary"
               onClick={handleExport}
               disabled={!editing || exporting}
             >
-              {exporting ? `Exporting ${exportPct}%` : "Export video"}
+              {exporting
+                ? exportStage === "convert"
+                  ? `Converting ${exportPct}%`
+                  : `Rendering ${exportPct}%`
+                : `Export ${format.toUpperCase()}`}
             </button>
           </div>
         </header>
