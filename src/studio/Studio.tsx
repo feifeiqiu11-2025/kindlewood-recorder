@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useCaptureController } from "../record/useCaptureController";
 import { downloadBlob, extensionForMimeType } from "../record/recording";
+import { loadRecording, clearRecording, type StoredRecording } from "../record/recordingStore";
 import {
   emptyProject,
   keptDuration,
@@ -57,6 +58,7 @@ export function Studio() {
   const [exportStage, setExportStage] = useState<"render" | "convert">("render");
   const [exportError, setExportError] = useState<string | null>(null);
   const [format, setFormat] = useState<"mp4" | "webm">("mp4");
+  const [recovered, setRecovered] = useState<StoredRecording | null>(null);
   const [pipWindow, setPipWindow] = useState<Window | null>(null);
   const [zoomLevel, setZoomLevel] = useState(1);
   const [aspect, setAspect] = useState<Aspect>("16:9");
@@ -70,6 +72,17 @@ export function Studio() {
 
   const editing = !!cap.recording;
   const pixelsPerSec = BASE_PX_PER_SEC * zoomLevel;
+
+  // On load, offer to recover a recording left behind by a reload/crash.
+  useEffect(() => {
+    let cancelled = false;
+    loadRecording().then((r) => {
+      if (!cancelled && r) setRecovered(r);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     projectRef.current = project;
@@ -339,12 +352,22 @@ export function Studio() {
       if (format === "mp4") {
         setExportStage("convert");
         setExportPct(0);
-        // Lazy-load ffmpeg.wasm so it never bloats the normal bundle.
-        const { transcodeToMp4 } = await import("../render/transcodeMp4");
-        const mp4 = await transcodeToMp4(webm, {
-          onProgress: (f) => setExportPct(Math.round(f * 100)),
-        });
-        downloadBlob(mp4, `kindlewood-edit-${stamp}.mp4`);
+        try {
+          // Lazy-load ffmpeg.wasm so it never bloats the normal bundle.
+          const { transcodeToMp4 } = await import("../render/transcodeMp4");
+          const mp4 = await transcodeToMp4(webm, {
+            onProgress: (f) => setExportPct(Math.round(f * 100)),
+          });
+          downloadBlob(mp4, `kindlewood-edit-${stamp}.mp4`);
+        } catch (convErr) {
+          // Never lose the export: hand back the WebM if MP4 conversion fails.
+          console.error("MP4 conversion failed:", convErr);
+          const ext = extensionForMimeType(cap.recording.mimeType);
+          downloadBlob(webm, `kindlewood-edit-${stamp}.${ext}`);
+          setExportError(
+            "MP4 conversion failed (often memory on a long clip) — downloaded WebM instead. Try a shorter clip for MP4.",
+          );
+        }
       } else {
         const ext = extensionForMimeType(cap.recording.mimeType);
         downloadBlob(webm, `kindlewood-edit-${stamp}.${ext}`);
@@ -512,6 +535,34 @@ export function Studio() {
             </button>
           </div>
         </header>
+
+        {recovered && !editing && cap.phase === "idle" && (
+          <div className="studio__recover" role="status">
+            <span>
+              Recovered your last recording ({Math.round(recovered.durationSec)}s) — restore it?
+            </span>
+            <div className="studio__recover-actions">
+              <button
+                className="btn btn--sm btn--primary"
+                onClick={() => {
+                  cap.restore(recovered);
+                  setRecovered(null);
+                }}
+              >
+                Restore
+              </button>
+              <button
+                className="btn btn--sm"
+                onClick={() => {
+                  void clearRecording();
+                  setRecovered(null);
+                }}
+              >
+                Discard
+              </button>
+            </div>
+          </div>
+        )}
 
         {cap.displaySurface === "monitor" &&
           script.trim().length > 0 &&

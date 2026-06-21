@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { pickSupportedMimeType } from "./recording";
+import { saveRecording, clearRecording, type StoredRecording } from "./recordingStore";
 
 export type CapturePhase =
   | "idle"
@@ -134,14 +135,12 @@ export function useCaptureController() {
     const url = URL.createObjectURL(blob);
     if (lastUrlRef.current) URL.revokeObjectURL(lastUrlRef.current);
     lastUrlRef.current = url;
-    setRecording({
-      blob,
-      url,
-      mimeType: mimeRef.current,
-      durationSec: accumMsRef.current / 1000,
-    });
+    const durationSec = accumMsRef.current / 1000;
+    setRecording({ blob, url, mimeType: mimeRef.current, durationSec });
     setPhase("stopped");
     cleanupStreams();
+    // Persist so a reload / crash (e.g. during MP4 transcode) can't lose it.
+    void saveRecording({ blob, mimeType: mimeRef.current, durationSec, savedAt: Date.now() });
   }, [cleanupStreams, stopTick]);
 
   const beginRecording = useCallback(() => {
@@ -381,6 +380,21 @@ export function useCaptureController() {
     }
     setRecording(null);
     setPhase("idle");
+    void clearRecording();
+  }, []);
+
+  // Re-open a recording recovered from IndexedDB after a reload/crash.
+  const restore = useCallback((stored: StoredRecording) => {
+    const url = URL.createObjectURL(stored.blob);
+    if (lastUrlRef.current) URL.revokeObjectURL(lastUrlRef.current);
+    lastUrlRef.current = url;
+    setRecording({
+      blob: stored.blob,
+      url,
+      mimeType: stored.mimeType,
+      durationSec: stored.durationSec,
+    });
+    setPhase("stopped");
   }, []);
 
   // Resolve the "user hit the browser's Stop sharing" case against live phase.
@@ -419,5 +433,6 @@ export function useCaptureController() {
     stop,
     cancel,
     reset,
+    restore,
   };
 }

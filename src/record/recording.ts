@@ -83,6 +83,7 @@ export function downloadBlob(blob: Blob, filename: string): void {
   document.body.appendChild(a);
   a.click();
   a.remove();
-  // Revoke on next tick so the download has a chance to start.
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  // Keep the object URL alive long enough for large downloads to finish;
+  // revoking too early can truncate them in some browsers.
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
