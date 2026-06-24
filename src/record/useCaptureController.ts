@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { pickSupportedMimeType } from "./recording";
 import { saveRecording, clearRecording, type StoredRecording } from "./recordingStore";
+import type { Beautify } from "./cameraFilter";
+import { CameraPipeline, type PipelineSettings } from "./cameraPipeline";
 
 export type CapturePhase =
   | "idle"
@@ -11,10 +13,21 @@ export type CapturePhase =
   | "stopped";
 
 export type CameraShape = "rounded" | "circle" | "square";
+// First char = vertical (t/b), second = horizontal (l/c/r).
+export type CameraPosition = "tl" | "tc" | "tr" | "bl" | "bc" | "br";
+export type CameraBackground = "none" | "blur" | "image";
 export type CaptureSettings = {
   mic: boolean;
   camera: boolean;
   cameraShape: CameraShape;
+  /** Corner the webcam PiP sits in over the screen. */
+  cameraPosition: CameraPosition;
+  /** Light "touch up" filter for the webcam PiP. */
+  beautify: Beautify;
+  /** Virtual background treatment for the webcam. */
+  background: CameraBackground;
+  /** Object URL of the replacement image when background === "image". */
+  backgroundImage: string | null;
 };
 
 export type Recording = {
@@ -65,7 +78,11 @@ export function useCaptureController() {
   const [settings, setSettings] = useState<CaptureSettings>({
     mic: true,
     camera: false,
-    cameraShape: "rounded",
+    cameraShape: "square",
+    cameraPosition: "br",
+    beautify: "off",
+    background: "none",
+    backgroundImage: null,
   });
   const [recording, setRecording] = useState<Recording | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -88,6 +105,7 @@ export function useCaptureController() {
   // Compositing (camera-on path).
   const compRafRef = useRef<number>(0);
   const compVideosRef = useRef<HTMLVideoElement[]>([]);
+  const cameraPipelineRef = useRef<CameraPipeline | null>(null);
 
   // Timing across pauses.
   const startedAtRef = useRef(0);
@@ -113,6 +131,37 @@ export function useCaptureController() {
     phaseRef.current = phase;
   }, [phase]);
 
+  // Camera lifecycle while idle: acquire the webcam as soon as it's enabled so
+  // it can be previewed, and keep that single stream for the recording (setup
+  // reuses cameraRef). Recording phases own the stream, so this stays out.
+  useEffect(() => {
+    if (phase !== "idle") return;
+    if (settings.camera) {
+      if (cameraRef.current) return;
+      let cancelled = false;
+      navigator.mediaDevices
+        .getUserMedia({ video: { width: 640, height: 480 }, audio: false })
+        .then((cam) => {
+          if (cancelled || cameraRef.current) {
+            cam.getTracks().forEach((t) => t.stop());
+            return;
+          }
+          cameraRef.current = cam;
+          setCameraStream(cam);
+        })
+        .catch(() => {});
+      return () => {
+        cancelled = true;
+      };
+    }
+    // Camera switched off while idle — release the preview stream.
+    if (cameraRef.current) {
+      cameraRef.current.getTracks().forEach((t) => t.stop());
+      cameraRef.current = null;
+      setCameraStream(null);
+    }
+  }, [phase, settings.camera]);
+
   const cleanupStreams = useCallback(() => {
     for (const r of [displayRef, micRef, cameraRef]) {
       r.current?.getTracks().forEach((t) => t.stop());
@@ -122,6 +171,8 @@ export function useCaptureController() {
       v.srcObject = null;
     });
     compVideosRef.current = [];
+    cameraPipelineRef.current?.dispose();
+    cameraPipelineRef.current = null;
     cancelAnimationFrame(compRafRef.current);
     setDisplayStream(null);
     setCameraStream(null);
@@ -195,6 +246,16 @@ export function useCaptureController() {
       compVideosRef.current = [dv, cv];
 
       const shape = settings.cameraShape;
+      const position = settings.cameraPosition;
+      // Run the webcam through the shared beautify + background pipeline (the
+      // same one the live preview uses), so the recording matches the preview.
+      const pipeline = new CameraPipeline();
+      cameraPipelineRef.current = pipeline;
+      const camSettings: PipelineSettings = {
+        beautify: settings.beautify,
+        background: settings.background,
+        backgroundImage: settings.backgroundImage,
+      };
       const clipPath = (ctx2: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) => {
         if (shape === "circle") {
           ctx2.beginPath();
@@ -214,8 +275,10 @@ export function useCaptureController() {
           const cw = W * PIP_WIDTH_PCT;
           const ch = square ? cw : cw * (cv.videoHeight / cv.videoWidth || 0.75);
           const m = W * PIP_MARGIN_PCT;
-          const x = W - cw - m;
-          const y = H - ch - m;
+          const hpos = position[1]; // l | c | r
+          const vpos = position[0]; // t | b
+          const x = hpos === "l" ? m : hpos === "r" ? W - cw - m : (W - cw) / 2;
+          const y = vpos === "t" ? m : H - ch - m;
           // Cover-crop the camera into a square for circle/square shapes.
           let sx = 0, sy = 0, sw = cv.videoWidth, sh = cv.videoHeight;
           if (square) {
@@ -225,10 +288,13 @@ export function useCaptureController() {
             sw = side;
             sh = side;
           }
+          // Process the camera frame; the returned canvas matches the source
+          // size, so the cover-crop maths below still apply.
+          const camSource: CanvasImageSource = pipeline.render(cv, camSettings);
           ctx.save();
           clipPath(ctx, x, y, cw, ch);
           ctx.clip();
-          ctx.drawImage(cv, sx, sy, sw, sh, x, y, cw, ch);
+          ctx.drawImage(camSource, sx, sy, sw, sh, x, y, cw, ch);
           ctx.restore();
           ctx.lineWidth = Math.max(2, W * 0.002);
           ctx.strokeStyle = "rgba(255,255,255,0.9)";
@@ -261,7 +327,17 @@ export function useCaptureController() {
     startTick();
     recorder.start(1000);
     setPhase("recording");
-  }, [settings.camera, settings.cameraShape, finalize, startTick, cleanupStreams]);
+  }, [
+    settings.camera,
+    settings.cameraShape,
+    settings.cameraPosition,
+    settings.beautify,
+    settings.background,
+    settings.backgroundImage,
+    finalize,
+    startTick,
+    cleanupStreams,
+  ]);
 
   const stopOrCancelRef = useRef<() => void>(() => {});
 
@@ -295,7 +371,9 @@ export function useCaptureController() {
           micRef.current = null;
         }
       }
-      if (settings.camera) {
+      // Reuse the camera already streaming for the idle self-view; only acquire
+      // here if it isn't live yet (avoids opening the device twice).
+      if (settings.camera && !cameraRef.current) {
         try {
           const cam = await navigator.mediaDevices.getUserMedia({
             video: { width: 640, height: 480 },

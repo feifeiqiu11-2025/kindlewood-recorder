@@ -171,10 +171,49 @@
   border-radius: 0;
 }
 
-.stage__pip--center {
-  position: static;
-  width: 30%;
-  margin-top: 1rem;
+/* Larger size for the pre-setup self-view. */
+.stage__pip--lg {
+  width: 38%;
+}
+
+/* PiP placement over the captured screen (also drives the self-view). */
+.stage__pip--pos-br {
+  right: 2.5%;
+  bottom: 2.5%;
+  left: auto;
+  top: auto;
+}
+.stage__pip--pos-bl {
+  left: 2.5%;
+  bottom: 2.5%;
+  right: auto;
+  top: auto;
+}
+.stage__pip--pos-bc {
+  left: 50%;
+  bottom: 2.5%;
+  right: auto;
+  top: auto;
+  transform: translateX(-50%);
+}
+.stage__pip--pos-tr {
+  right: 2.5%;
+  top: 2.5%;
+  left: auto;
+  bottom: auto;
+}
+.stage__pip--pos-tl {
+  left: 2.5%;
+  top: 2.5%;
+  right: auto;
+  bottom: auto;
+}
+.stage__pip--pos-tc {
+  left: 50%;
+  top: 2.5%;
+  right: auto;
+  bottom: auto;
+  transform: translateX(-50%);
 }
 
 .stage__recstate {
@@ -196,6 +235,7 @@
 }
 
 .stage__placeholder {
+  position: relative;
   width: 100%;
   height: 100%;
   display: flex;
@@ -293,6 +333,140 @@
 
 .bar__spacer {
   flex: 1;
+}
+
+/* Camera options dropdown (shape + touch up) — keeps the bar tidy. */
+.cam-menu {
+  position: relative;
+  display: inline-flex;
+}
+
+.cam-menu__trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-height: 38px;
+  padding: 0 0.75rem;
+  background: #efeef7;
+  border: none;
+  border-radius: 10px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #44445e;
+  cursor: pointer;
+  transition: background 0.14s ease;
+}
+
+.cam-menu__trigger:hover {
+  background: #e6e4f3;
+}
+
+.cam-menu__chevron {
+  color: #8a8aa0;
+}
+
+.cam-menu__panel {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  padding: 0.9rem;
+  max-height: 70vh;
+  overflow-y: auto;
+  background: #fff;
+  border: 1px solid #ece9f6;
+  border-radius: 14px;
+  box-shadow: 0 12px 32px rgba(20, 20, 40, 0.16);
+}
+
+.cam-menu__row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.cam-menu__label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #9696ad;
+}
+
+/* 3×2 spatial grid for camera position — cell location = camera location. */
+.cam-corners {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+  width: 100px;
+  height: 44px;
+}
+
+.cam-corners__btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #e2e0ee;
+  background: #f6f5fb;
+  border-radius: 6px;
+  cursor: pointer;
+  padding: 0;
+  transition: border-color 0.14s ease, background 0.14s ease;
+}
+
+.cam-corners__btn:hover {
+  border-color: #c9c4e6;
+}
+
+.cam-corners__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background: #b9b6cc;
+  transition: background 0.14s ease;
+}
+
+.cam-corners__btn.is-active {
+  border-color: #6d4dff;
+  background: #efebff;
+}
+
+.cam-corners__btn.is-active .cam-corners__dot {
+  background: #6d4dff;
+}
+
+/* Background image upload. */
+.cam-menu__upload {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.cam-menu__upload-btn {
+  padding: 6px 12px;
+  background: #efeef7;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #44445e;
+  cursor: pointer;
+  transition: background 0.14s ease;
+}
+
+.cam-menu__upload-btn:hover {
+  background: #e6e4f3;
+}
+
+.cam-menu__thumb {
+  width: 40px;
+  height: 28px;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1px solid #e2e0ee;
 }
 
 /* Buttons — one system across record + edit phases */

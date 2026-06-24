@@ -24,6 +24,8 @@ import { ASPECTS, aspectCss, aspectDims, type Aspect } from "./aspect";
 import { ZoomTargetOverlay } from "./ZoomTargetOverlay";
 import { focusFromClient } from "./stageGeometry";
 import { SoundsIcon, MusicIcon, ZoomIcon, ScriptIcon } from "./icons";
+import { CameraPreview } from "./CameraPreview";
+import { CameraOptionsMenu } from "./CameraOptionsMenu";
 import "./Studio.css";
 
 const aspectNum = (a: Aspect) => (a === "16:9" ? 16 / 9 : a === "9:16" ? 9 / 16 : 1);
@@ -611,14 +613,12 @@ export function Studio() {
                 }}
               />
               {cap.cameraStream && (
-                <video
-                  autoPlay
-                  muted
-                  playsInline
-                  className={`stage__pip stage__pip--${cap.settings.cameraShape}`}
-                  ref={(el) => {
-                    if (el && el.srcObject !== cap.cameraStream) el.srcObject = cap.cameraStream;
-                  }}
+                <CameraPreview
+                  stream={cap.cameraStream}
+                  className={`stage__pip stage__pip--${cap.settings.cameraShape} stage__pip--pos-${cap.settings.cameraPosition}`}
+                  beautify={cap.settings.beautify}
+                  background={cap.settings.background}
+                  backgroundImage={cap.settings.backgroundImage}
                 />
               )}
               {cap.phase === "countdown" && (
@@ -638,7 +638,17 @@ export function Studio() {
             </div>
           ) : (
             <div className="stage__placeholder">
-              <p>Set up a recording to begin.</p>
+              {cap.cameraStream ? (
+                <CameraPreview
+                  stream={cap.cameraStream}
+                  className={`stage__pip stage__pip--${cap.settings.cameraShape} stage__pip--pos-${cap.settings.cameraPosition} stage__pip--lg`}
+                  beautify={cap.settings.beautify}
+                  background={cap.settings.background}
+                  backgroundImage={cap.settings.backgroundImage}
+                />
+              ) : (
+                <p>Set up a recording to begin.</p>
+              )}
             </div>
           )}
         </div>
@@ -750,18 +760,7 @@ function RecordControls({
           <span>Camera</span>
         </label>
         {settings.camera && (
-          <div className="segmented" role="group" aria-label="Camera shape">
-            {(["rounded", "circle", "square"] as const).map((sh) => (
-              <button
-                key={sh}
-                className={`segmented__btn${settings.cameraShape === sh ? " is-active" : ""}`}
-                onClick={() => setSettings((s) => ({ ...s, cameraShape: sh }))}
-                aria-pressed={settings.cameraShape === sh}
-              >
-                {sh[0].toUpperCase() + sh.slice(1)}
-              </button>
-            ))}
-          </div>
+          <CameraOptionsMenu settings={settings} setSettings={setSettings} />
         )}
         <span className="bar__spacer" />
         <button className="btn btn--primary" onClick={cap.setup} disabled={!cap.supported}>
