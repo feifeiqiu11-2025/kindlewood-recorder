@@ -69,6 +69,7 @@
   cursor: col-resize;
   z-index: 6;
   touch-action: none;
+  user-select: none;
 }
 
 .rail__resize::after {

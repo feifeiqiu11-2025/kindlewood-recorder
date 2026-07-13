@@ -102,6 +102,15 @@ export function Studio() {
     };
   }, []);
 
+  // Keep the (px) stage height within the viewport when the window shrinks, so
+  // the record bar below it can't get pushed off-screen.
+  useEffect(() => {
+    const onResize = () =>
+      setStageHeight((h) => Math.min(h, Math.round(window.innerHeight * 0.92)));
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
   useEffect(() => {
     projectRef.current = project;
   }, [project]);

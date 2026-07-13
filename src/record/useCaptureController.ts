@@ -180,7 +180,10 @@ export function useCaptureController() {
           setError(null);
         })
         .catch(() => {
-          if (!cancelled) {
+          // Only surface an error in camera-only mode, where the webcam is the
+          // whole recording. In screen mode it's an optional PiP, so fail quietly
+          // rather than alarming the user about something they don't need.
+          if (!cancelled && settings.mode === "camera") {
             setError(
               "Couldn't access the camera. Allow camera access in your browser, then try again.",
             );
@@ -196,7 +199,7 @@ export function useCaptureController() {
       cameraRef.current = null;
       setCameraStream(null);
     }
-  }, [phase, settings.camera]);
+  }, [phase, settings.camera, settings.mode]);
 
   const cleanupStreams = useCallback(() => {
     for (const r of [displayRef, micRef, cameraRef]) {
