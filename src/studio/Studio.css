@@ -128,6 +128,12 @@
   overflow: hidden;
 }
 
+/* Expanded stage: use most of the viewport height while keeping the ratio, so
+   the speaker sees a bigger view of themselves and the script. */
+.stage--big {
+  height: 82vh;
+}
+
 .stage__live,
 .stage__canvas {
   width: 100%;
@@ -250,16 +256,56 @@
 }
 
 /* Transparent teleprompter overlaid over the top of the camera preview, so the
-   speaker reads while keeping their eyes near the lens. Never recorded. */
+   speaker reads while keeping their eyes near the lens. Never recorded. Tall
+   enough to read the current line high (near the lens) while previewing what's
+   coming up lower down. */
 .stage__tele {
   position: absolute;
   top: 0;
   left: 0;
   right: 0;
-  height: 46%;
+  height: 64%;
   display: flex;
   padding: 12px 14px 0;
   box-sizing: border-box;
+}
+
+/* Floating transport controls over the camera preview — always reachable even
+   when the stage is expanded and the record bar is scrolled out of view. */
+.stage__transport {
+  position: absolute;
+  bottom: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 8px;
+  z-index: 5;
+}
+
+.stage__transport button {
+  min-height: 34px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: rgba(20, 20, 30, 0.62);
+  color: #fff;
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+  backdrop-filter: blur(6px);
+}
+
+.stage__transport button:hover {
+  background: rgba(20, 20, 30, 0.82);
+}
+
+.stage__transport .stage__transport--stop {
+  background: rgba(226, 61, 91, 0.9);
+  border-color: transparent;
+}
+
+.stage__transport .stage__transport--stop:hover {
+  background: rgba(226, 61, 91, 1);
 }
 
 /* Teleprompter controls strip (camera mode). */
@@ -551,6 +597,12 @@
   border-radius: 8px;
 }
 
+.btn.is-active {
+  background: #efebff;
+  border-color: #c9c0ff;
+  color: #4b2ed6;
+}
+
 .btn--primary {
   background: #6d4dff;
   border-color: #6d4dff;
@@ -657,5 +709,10 @@
   }
   .tp-strip {
     color: #a8a8c0;
+  }
+  .btn.is-active {
+    background: #34285f;
+    border-color: #5a48a8;
+    color: #d8ccff;
   }
 }

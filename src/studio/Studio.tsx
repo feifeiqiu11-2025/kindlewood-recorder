@@ -65,6 +65,8 @@ export function Studio() {
   const [pipWindow, setPipWindow] = useState<Window | null>(null);
   const [zoomLevel, setZoomLevel] = useState(1);
   const [aspect, setAspect] = useState<Aspect>("16:9");
+  // Enlarge the preview stage to use most of the viewport (keeps the ratio).
+  const [bigStage, setBigStage] = useState(false);
 
   // Teleprompter (presenter aid — never recorded or exported).
   const [script, setScript] = useState("");
@@ -507,6 +509,14 @@ export function Studio() {
         <header className="studio__header">
           <h1 className="studio__title">KindleWood Recorder</h1>
           <div className="studio__header-actions">
+            <button
+              className={`btn btn--sm${bigStage ? " is-active" : ""}`}
+              onClick={() => setBigStage((b) => !b)}
+              aria-pressed={bigStage}
+              title={bigStage ? "Shrink the preview" : "Enlarge the preview (keeps the ratio)"}
+            >
+              {bigStage ? "Shrink" : "Expand"}
+            </button>
             <div className="segmented" role="group" aria-label="Aspect ratio">
               {ASPECTS.map((a) => (
                 <button
@@ -600,7 +610,10 @@ export function Studio() {
         {/* Hidden source video used for editing/export. */}
         <video ref={videoRef} playsInline className="studio__source" />
 
-        <div className="stage" style={{ aspectRatio: aspectCss(aspect) }}>
+        <div
+          className={`stage${bigStage ? " stage--big" : ""}`}
+          style={{ aspectRatio: aspectCss(aspect) }}
+        >
           {editing ? (
             <>
               <canvas ref={canvasRef} className="stage__canvas" onPointerDown={onCanvasPointerDown} />
@@ -687,6 +700,18 @@ export function Studio() {
               )}
               {cap.phase === "paused" && (
                 <div className="stage__rec stage__rec--paused">Paused</div>
+              )}
+              {(cap.phase === "recording" || cap.phase === "paused") && (
+                <div className="stage__transport">
+                  {cap.phase === "recording" ? (
+                    <button onClick={cap.pause}>Pause</button>
+                  ) : (
+                    <button onClick={cap.resume}>Resume</button>
+                  )}
+                  <button className="stage__transport--stop" onClick={cap.stop}>
+                    Stop
+                  </button>
+                </div>
               )}
             </div>
           ) : (
