@@ -244,6 +244,47 @@
   color: #9a9ab8;
 }
 
+/* Camera-only mode: the webcam fills the frame (cover, not letterboxed). */
+.stage__camfill {
+  object-fit: cover;
+}
+
+/* Transparent teleprompter overlaid over the top of the camera preview, so the
+   speaker reads while keeping their eyes near the lens. Never recorded. */
+.stage__tele {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 46%;
+  display: flex;
+  padding: 12px 14px 0;
+  box-sizing: border-box;
+}
+
+/* Teleprompter controls strip (camera mode). */
+.tp-strip {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  flex-wrap: wrap;
+  padding: 6px 2px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #6a6a82;
+}
+
+.tp-strip__slider {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.tp-strip__slider input[type="range"] {
+  width: 92px;
+  accent-color: #6d4dff;
+}
+
 .stage__countdown {
   position: absolute;
   inset: 0;
@@ -613,5 +654,8 @@
   }
   .check {
     color: #c2c2da;
+  }
+  .tp-strip {
+    color: #a8a8c0;
   }
 }

@@ -15,6 +15,12 @@ type TeleprompterProps = {
   fontSize: number;
   /** Bump to reset the scroll back to the top (e.g. on a new take). */
   resetKey: number;
+  /**
+   * Background opacity, 0–1. 1 = solid dark panel (the classic look); lower
+   * values make the panel see-through so it can float over a live camera view
+   * and let the speaker keep their eyes near the lens. Defaults to solid.
+   */
+  scrim?: number;
 };
 
 const WRAP: React.CSSProperties = {
@@ -23,7 +29,6 @@ const WRAP: React.CSSProperties = {
   minHeight: 0,
   overflow: "hidden",
   borderRadius: 10,
-  background: "#0c0c12",
 };
 
 const CONTENT: React.CSSProperties = {
@@ -34,9 +39,11 @@ const CONTENT: React.CSSProperties = {
   lineHeight: 1.5,
   whiteSpace: "pre-wrap",
   willChange: "transform",
+  // Keep white text readable even over a bright, busy camera image.
+  textShadow: "0 1px 3px rgba(0,0,0,0.92), 0 0 2px rgba(0,0,0,0.85)",
 };
 
-const EMPTY: React.CSSProperties = { ...CONTENT, color: "#6b6b85", fontWeight: 500 };
+const EMPTY: React.CSSProperties = { ...CONTENT, color: "#c9c9dd", fontWeight: 500 };
 
 const HOVER_BADGE: React.CSSProperties = {
   position: "absolute",
@@ -51,17 +58,17 @@ const HOVER_BADGE: React.CSSProperties = {
   pointerEvents: "none",
 };
 
-const fade = (edge: "top" | "bottom"): React.CSSProperties => ({
+const fade = (edge: "top" | "bottom", scrim: number): React.CSSProperties => ({
   position: "absolute",
   left: 0,
   right: 0,
   [edge]: 0,
   height: 28,
   pointerEvents: "none",
-  background: `linear-gradient(${edge === "top" ? "180deg" : "0deg"}, #0c0c12, transparent)`,
+  background: `linear-gradient(${edge === "top" ? "180deg" : "0deg"}, rgba(12,12,18,${scrim}), transparent)`,
 });
 
-export function Teleprompter({ text, playing, speed, fontSize, resetKey }: TeleprompterProps) {
+export function Teleprompter({ text, playing, speed, fontSize, resetKey, scrim = 1 }: TeleprompterProps) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const posRef = useRef(0);
@@ -110,15 +117,15 @@ export function Teleprompter({ text, playing, speed, fontSize, resetKey }: Telep
   return (
     <div
       ref={wrapRef}
-      style={WRAP}
+      style={{ ...WRAP, background: `rgba(12,12,18,${scrim})` }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
       <div ref={contentRef} style={text ? { ...CONTENT, fontSize } : { ...EMPTY, fontSize }}>
         {text || "Write your script in the Script tab to use the teleprompter."}
       </div>
-      <div style={fade("top")} />
-      <div style={fade("bottom")} />
+      <div style={fade("top", scrim)} />
+      <div style={fade("bottom", scrim)} />
       {hovered && playing && <div style={HOVER_BADGE}>paused — move away to resume</div>}
     </div>
   );

@@ -17,6 +17,7 @@ import { exportVideo } from "../render/exportVideo";
 import { LeftRail, type RailTab } from "./LeftRail";
 import { Tracks } from "./Tracks";
 import { PresenterOverlay } from "./PresenterOverlay";
+import { Teleprompter } from "./Teleprompter";
 import { ScriptPanel } from "./ScriptPanel";
 import { ActionBar } from "./ActionBar";
 import { dbToGain } from "./audio";
@@ -71,8 +72,18 @@ export function Studio() {
   const [tpSpeed, setTpSpeed] = useState(12);
   const [tpFontSize, setTpFontSize] = useState(26);
   const [tpResetKey, setTpResetKey] = useState(0);
+  // Teleprompter background opacity for the camera-mode overlay (0 = fully
+  // see-through so the speaker can keep their eyes on the lens).
+  const [tpScrim, setTpScrim] = useState(0.2);
 
   const editing = !!cap.recording;
+  const hasScript = script.trim().length > 0;
+  const cameraMode = cap.settings.mode === "camera";
+  // The camera-mode teleprompter is overlaid on the live preview; since that
+  // mode records the pipeline canvas (not the DOM), the overlay is never in the
+  // recording — so the speaker reads over their own face, eyes near the camera.
+  const showTeleOverlay =
+    cameraMode && hasScript && ["countdown", "recording", "paused"].includes(cap.phase);
   const pixelsPerSec = BASE_PX_PER_SEC * zoomLevel;
 
   // On load, offer to recover a recording left behind by a reload/crash.
@@ -390,22 +401,26 @@ export function Studio() {
   // Fire-and-forget so the PiP window never blocks or derails recording — the
   // in-page floating bar covers the case where it fails or is unsupported.
   const startRecording = () => {
-    const hasScript = script.trim().length > 0;
-    const dpip = (window as unknown as { documentPictureInPicture?: { requestWindow: (o: { width: number; height: number }) => Promise<Window> } }).documentPictureInPicture;
-    dpip
-      ?.requestWindow(hasScript ? { width: 460, height: 340 } : { width: 300, height: 96 })
-      .then((w) => {
-        // Fill the window so the overlay reflows when the user resizes it.
-        w.document.body.style.cssText =
-          "margin:0;height:100vh;overflow:hidden;background:#16161f";
-        w.document.title = hasScript ? "Teleprompter" : "Recording";
-        w.addEventListener("pagehide", () => setPipWindow(null));
-        setPipWindow(w);
-      })
-      .catch(() => {});
+    // Camera mode overlays the teleprompter on the preview, so it never needs a
+    // separate floating window. Screen mode opens a Document PiP window so the
+    // controls/script stay out of the captured surface.
+    if (!cameraMode) {
+      const dpip = (window as unknown as { documentPictureInPicture?: { requestWindow: (o: { width: number; height: number }) => Promise<Window> } }).documentPictureInPicture;
+      dpip
+        ?.requestWindow(hasScript ? { width: 460, height: 340 } : { width: 300, height: 96 })
+        .then((w) => {
+          // Fill the window so the overlay reflows when the user resizes it.
+          w.document.body.style.cssText =
+            "margin:0;height:100vh;overflow:hidden;background:#16161f";
+          w.document.title = hasScript ? "Teleprompter" : "Recording";
+          w.addEventListener("pagehide", () => setPipWindow(null));
+          setPipWindow(w);
+        })
+        .catch(() => {});
+    }
     setTpResetKey((k) => k + 1);
     setTpPlaying(true);
-    cap.arm();
+    cap.arm(aspectDims(aspect));
   };
 
   const newRecording = () => {
@@ -636,6 +651,44 @@ export function Studio() {
                 <div className="stage__rec stage__rec--paused">Paused</div>
               )}
             </div>
+          ) : cameraMode && cap.cameraStream ? (
+            // Camera-only: webcam fills the frame; the teleprompter (if any) is
+            // overlaid near the top so eyes stay on the lens. Not recorded.
+            <div className="stage__live">
+              <CameraPreview
+                stream={cap.cameraStream}
+                className="stage__canvas stage__camfill"
+                beautify={cap.settings.beautify}
+                background={cap.settings.background}
+                backgroundImage={cap.settings.backgroundImage}
+              />
+              {showTeleOverlay && (
+                <div className="stage__tele">
+                  <Teleprompter
+                    text={script}
+                    playing={tpPlaying}
+                    speed={tpSpeed}
+                    fontSize={tpFontSize}
+                    resetKey={tpResetKey}
+                    scrim={tpScrim}
+                  />
+                </div>
+              )}
+              {cap.phase === "countdown" && (
+                <div className="stage__countdown" aria-live="assertive">
+                  {cap.countdown}
+                </div>
+              )}
+              {cap.phase === "recording" && (
+                <div className="stage__rec">
+                  <span className="stage__rec-dot" />
+                  REC
+                </div>
+              )}
+              {cap.phase === "paused" && (
+                <div className="stage__rec stage__rec--paused">Paused</div>
+              )}
+            </div>
           ) : (
             <div className="stage__placeholder">
               {cap.cameraStream ? (
@@ -653,27 +706,81 @@ export function Studio() {
           )}
         </div>
 
-        <PresenterOverlay
-          target={pipWindow}
-          phase={cap.phase}
-          countdown={cap.countdown}
-          elapsedSec={cap.elapsedSec}
-          onPause={cap.pause}
-          onResume={cap.resume}
-          onStop={cap.stop}
-          script={script}
-          tpPlaying={tpPlaying}
-          tpSpeed={tpSpeed}
-          tpFontSize={tpFontSize}
-          tpResetKey={tpResetKey}
-          onTpToggle={() => setTpPlaying((p) => !p)}
-          onTpRestart={() => {
-            setTpResetKey((k) => k + 1);
-            setTpPlaying(true);
-          }}
-          onTpSpeed={setTpSpeed}
-          onTpFont={setTpFontSize}
-        />
+        {showTeleOverlay && (
+          <div className="tp-strip" role="group" aria-label="Teleprompter controls">
+            <button className="btn btn--sm" onClick={() => setTpPlaying((p) => !p)}>
+              {tpPlaying ? "Pause scroll" : "Start scroll"}
+            </button>
+            <button
+              className="btn btn--sm"
+              onClick={() => {
+                setTpResetKey((k) => k + 1);
+                setTpPlaying(true);
+              }}
+            >
+              Restart
+            </button>
+            <label className="tp-strip__slider">
+              Speed
+              <input
+                type="range"
+                min={4}
+                max={140}
+                step={2}
+                value={tpSpeed}
+                onChange={(e) => setTpSpeed(Number(e.target.value))}
+              />
+            </label>
+            <label className="tp-strip__slider">
+              Size
+              <input
+                type="range"
+                min={16}
+                max={44}
+                step={2}
+                value={tpFontSize}
+                onChange={(e) => setTpFontSize(Number(e.target.value))}
+              />
+            </label>
+            <label className="tp-strip__slider">
+              See-through
+              <input
+                type="range"
+                min={0}
+                max={0.8}
+                step={0.05}
+                value={0.8 - tpScrim}
+                onChange={(e) => setTpScrim(0.8 - Number(e.target.value))}
+              />
+            </label>
+          </div>
+        )}
+
+        {/* Screen mode only: camera mode uses the on-preview overlay + in-page
+            bar, so it never needs the floating presenter window/fallback. */}
+        {!cameraMode && (
+          <PresenterOverlay
+            target={pipWindow}
+            phase={cap.phase}
+            countdown={cap.countdown}
+            elapsedSec={cap.elapsedSec}
+            onPause={cap.pause}
+            onResume={cap.resume}
+            onStop={cap.stop}
+            script={script}
+            tpPlaying={tpPlaying}
+            tpSpeed={tpSpeed}
+            tpFontSize={tpFontSize}
+            tpResetKey={tpResetKey}
+            onTpToggle={() => setTpPlaying((p) => !p)}
+            onTpRestart={() => {
+              setTpResetKey((k) => k + 1);
+              setTpPlaying(true);
+            }}
+            onTpSpeed={setTpSpeed}
+            onTpFont={setTpFontSize}
+          />
+        )}
 
         {/* Transport / record bar */}
         {editing ? (
@@ -741,8 +848,27 @@ function RecordControls({
 }) {
   const { phase, settings, setSettings } = cap;
   if (phase === "idle") {
+    const camMode = settings.mode === "camera";
     return (
       <>
+        <div className="segmented" role="group" aria-label="What to record">
+          <button
+            className={`segmented__btn${!camMode ? " is-active" : ""}`}
+            onClick={() => setSettings((s) => ({ ...s, mode: "screen" }))}
+            aria-pressed={!camMode}
+            title="Record your screen, with the webcam as an optional corner overlay"
+          >
+            Screen
+          </button>
+          <button
+            className={`segmented__btn${camMode ? " is-active" : ""}`}
+            onClick={() => setSettings((s) => ({ ...s, mode: "camera" }))}
+            aria-pressed={camMode}
+            title="Record just yourself on camera — no screen sharing"
+          >
+            Just me
+          </button>
+        </div>
         <label className="check">
           <input
             type="checkbox"
@@ -751,20 +877,27 @@ function RecordControls({
           />
           <span>Microphone</span>
         </label>
-        <label className="check">
-          <input
-            type="checkbox"
-            checked={settings.camera}
-            onChange={(e) => setSettings((s) => ({ ...s, camera: e.target.checked }))}
+        {/* In camera mode the webcam is the recording, so it's always on. */}
+        {!camMode && (
+          <label className="check">
+            <input
+              type="checkbox"
+              checked={settings.camera}
+              onChange={(e) => setSettings((s) => ({ ...s, camera: e.target.checked }))}
+            />
+            <span>Camera</span>
+          </label>
+        )}
+        {(settings.camera || camMode) && (
+          <CameraOptionsMenu
+            settings={settings}
+            setSettings={setSettings}
+            fullFrame={camMode}
           />
-          <span>Camera</span>
-        </label>
-        {settings.camera && (
-          <CameraOptionsMenu settings={settings} setSettings={setSettings} />
         )}
         <span className="bar__spacer" />
         <button className="btn btn--primary" onClick={cap.setup} disabled={!cap.supported}>
-          Set up recording
+          {camMode ? "Set up camera" : "Set up recording"}
         </button>
       </>
     );

@@ -16,7 +16,15 @@ export type CameraShape = "rounded" | "circle" | "square";
 // First char = vertical (t/b), second = horizontal (l/c/r).
 export type CameraPosition = "tl" | "tc" | "tr" | "bl" | "bc" | "br";
 export type CameraBackground = "none" | "blur" | "image";
+/**
+ * "screen" records the shared screen (webcam optional, composited as a PiP);
+ * "camera" records the webcam full-frame with no screen share at all — a
+ * "just me talking" mode that skips the OS screen picker.
+ */
+export type RecordMode = "screen" | "camera";
 export type CaptureSettings = {
+  /** What the recording captures. */
+  mode: RecordMode;
   mic: boolean;
   camera: boolean;
   cameraShape: CameraShape;
@@ -61,8 +69,22 @@ function roundRectPath(
 
 const isSupported = () =>
   typeof navigator !== "undefined" &&
-  !!navigator.mediaDevices?.getDisplayMedia &&
+  !!navigator.mediaDevices?.getUserMedia &&
   typeof MediaRecorder !== "undefined";
+
+/** Cover-fit a source rect into a WxH frame, returning the crop box. */
+function coverCrop(sw: number, sh: number, dw: number, dh: number) {
+  const sAspect = sw / sh;
+  const dAspect = dw / dh;
+  if (sAspect > dAspect) {
+    // Source is wider — crop the sides.
+    const w = sh * dAspect;
+    return { sx: (sw - w) / 2, sy: 0, sw: w, sh };
+  }
+  // Source is taller — crop top/bottom.
+  const h = sw / dAspect;
+  return { sx: 0, sy: (sh - h) / 2, sw, sh: h };
+}
 
 /**
  * Drives the full recording lifecycle for the studio:
@@ -76,6 +98,7 @@ const isSupported = () =>
 export function useCaptureController() {
   const [phase, setPhase] = useState<CapturePhase>("idle");
   const [settings, setSettings] = useState<CaptureSettings>({
+    mode: "screen",
     mic: true,
     camera: false,
     cameraShape: "square",
@@ -106,6 +129,9 @@ export function useCaptureController() {
   const compRafRef = useRef<number>(0);
   const compVideosRef = useRef<HTMLVideoElement[]>([]);
   const cameraPipelineRef = useRef<CameraPipeline | null>(null);
+  // Output frame size for camera-only recording (set from the chosen aspect at
+  // arm time). Ignored in screen mode, where the display defines the size.
+  const cameraOutRef = useRef<{ w: number; h: number }>({ w: 1920, h: 1080 });
 
   // Timing across pauses.
   const startedAtRef = useRef(0);
@@ -136,7 +162,9 @@ export function useCaptureController() {
   // reuses cameraRef). Recording phases own the stream, so this stays out.
   useEffect(() => {
     if (phase !== "idle") return;
-    if (settings.camera) {
+    // Camera-only mode always needs the webcam; screen mode only when opted in.
+    const cameraNeeded = settings.camera || settings.mode === "camera";
+    if (cameraNeeded) {
       if (cameraRef.current) return;
       let cancelled = false;
       navigator.mediaDevices
@@ -160,7 +188,7 @@ export function useCaptureController() {
       cameraRef.current = null;
       setCameraStream(null);
     }
-  }, [phase, settings.camera]);
+  }, [phase, settings.camera, settings.mode]);
 
   const cleanupStreams = useCallback(() => {
     for (const r of [displayRef, micRef, cameraRef]) {
@@ -198,15 +226,84 @@ export function useCaptureController() {
     // Idempotency guard: never start a second recorder over a live one.
     if (recorderRef.current && recorderRef.current.state !== "inactive") return;
     const mimeType = pickSupportedMimeType();
-    const display = displayRef.current;
-    const hasLiveVideo =
-      !!display && display.getVideoTracks().some((t) => t.readyState === "live");
     if (!mimeType) {
       setError("This browser can't record video (no supported codec).");
       setPhase("idle");
       cleanupStreams();
       return;
     }
+
+    const micTracks = micRef.current?.getAudioTracks() ?? [];
+    let recordStream: MediaStream;
+
+    // --- Camera-only mode: record the webcam full-frame, no screen share. ---
+    if (settings.mode === "camera") {
+      const cam = cameraRef.current;
+      const hasLiveCam =
+        !!cam && cam.getVideoTracks().some((t) => t.readyState === "live");
+      if (!hasLiveCam) {
+        setError("The camera isn't available. Check permissions and try again.");
+        setPhase("idle");
+        cleanupStreams();
+        return;
+      }
+      mimeRef.current = mimeType;
+      chunksRef.current = [];
+
+      const { w: W, h: H } = cameraOutRef.current;
+      const canvas = document.createElement("canvas");
+      canvas.width = W;
+      canvas.height = H;
+      const ctx = canvas.getContext("2d")!;
+
+      const cv = document.createElement("video");
+      cv.srcObject = cam!;
+      cv.muted = true;
+      cv.playsInline = true;
+      void cv.play();
+      compVideosRef.current = [cv];
+
+      const pipeline = new CameraPipeline();
+      cameraPipelineRef.current = pipeline;
+      const camSettings: PipelineSettings = {
+        beautify: settings.beautify,
+        background: settings.background,
+        backgroundImage: settings.backgroundImage,
+      };
+
+      const draw = () => {
+        if (cv.videoWidth) {
+          // The pipeline output matches the source size, so crop against it.
+          const src = pipeline.render(cv, camSettings);
+          const { sx, sy, sw, sh } = coverCrop(cv.videoWidth, cv.videoHeight, W, H);
+          ctx.drawImage(src, sx, sy, sw, sh, 0, 0, W, H);
+        }
+        compRafRef.current = requestAnimationFrame(draw);
+      };
+      compRafRef.current = requestAnimationFrame(draw);
+
+      const cs = canvas.captureStream(30);
+      recordStream = new MediaStream([...cs.getVideoTracks(), ...micTracks]);
+
+      const recorder = new MediaRecorder(recordStream, { mimeType });
+      recorderRef.current = recorder;
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunksRef.current.push(e.data);
+      };
+      recorder.onstop = finalize;
+      accumMsRef.current = 0;
+      startedAtRef.current = performance.now();
+      setElapsedSec(0);
+      startTick();
+      recorder.start(1000);
+      setPhase("recording");
+      return;
+    }
+
+    // --- Screen mode (webcam optional as a PiP). ---
+    const display = displayRef.current;
+    const hasLiveVideo =
+      !!display && display.getVideoTracks().some((t) => t.readyState === "live");
     if (!display || !hasLiveVideo) {
       setError("The screen share ended before recording started. Please try again.");
       setPhase("idle");
@@ -215,9 +312,6 @@ export function useCaptureController() {
     }
     mimeRef.current = mimeType;
     chunksRef.current = [];
-
-    let recordStream: MediaStream;
-    const micTracks = micRef.current?.getAudioTracks() ?? [];
 
     if (settings.camera && cameraRef.current) {
       const track = display.getVideoTracks()[0];
@@ -328,6 +422,7 @@ export function useCaptureController() {
     recorder.start(1000);
     setPhase("recording");
   }, [
+    settings.mode,
     settings.camera,
     settings.cameraShape,
     settings.cameraPosition,
@@ -344,6 +439,38 @@ export function useCaptureController() {
   const setup = useCallback(async () => {
     setError(null);
     if (!isSupported()) {
+      setError("Recording is not supported in this browser.");
+      return;
+    }
+
+    // Camera-only: no screen picker. Acquire mic (optional) + webcam, then go
+    // straight to "ready".
+    if (settings.mode === "camera") {
+      if (settings.mic) {
+        try {
+          micRef.current = await navigator.mediaDevices.getUserMedia({ audio: true });
+        } catch {
+          micRef.current = null;
+        }
+      }
+      if (!cameraRef.current) {
+        try {
+          const cam = await navigator.mediaDevices.getUserMedia({
+            video: { width: 1280, height: 720 },
+            audio: false,
+          });
+          cameraRef.current = cam;
+          setCameraStream(cam);
+        } catch {
+          setError("Couldn't access the camera. Check permissions and try again.");
+          return;
+        }
+      }
+      setPhase("ready");
+      return;
+    }
+
+    if (!navigator.mediaDevices?.getDisplayMedia) {
       setError("Screen recording is not supported in this browser.");
       return;
     }
@@ -391,10 +518,12 @@ export function useCaptureController() {
     }
   }, [settings]);
 
-  const arm = useCallback(() => {
+  const arm = useCallback((cameraOut?: { w: number; h: number }) => {
     // No side effects inside a setState updater — StrictMode double-invokes
     // updaters and would spawn two countdown timers (→ two recorders).
     if (phaseRef.current !== "ready") return;
+    // Lock the output frame size for camera-only mode (from the chosen aspect).
+    if (cameraOut) cameraOutRef.current = cameraOut;
     if (cdRef.current) clearInterval(cdRef.current);
     setError(null);
     setPhase("countdown");

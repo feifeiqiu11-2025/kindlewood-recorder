@@ -33,9 +33,12 @@ const cap = (s: string) => s[0].toUpperCase() + s.slice(1);
 export function CameraOptionsMenu({
   settings,
   setSettings,
+  fullFrame = false,
 }: {
   settings: CaptureSettings;
   setSettings: Dispatch<SetStateAction<CaptureSettings>>;
+  /** When the webcam fills the frame (camera-only mode), shape/position don't apply. */
+  fullFrame?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -78,7 +81,9 @@ export function CameraOptionsMenu({
         aria-haspopup="true"
       >
         <span>
-          {cap(settings.cameraShape)} · {BEAUTIFY_LABELS[settings.beautify]}
+          {fullFrame
+            ? BEAUTIFY_LABELS[settings.beautify]
+            : `${cap(settings.cameraShape)} · ${BEAUTIFY_LABELS[settings.beautify]}`}
         </span>
         <svg className="cam-menu__chevron" width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
           <path
@@ -94,39 +99,43 @@ export function CameraOptionsMenu({
 
       {open && (
         <div className="cam-menu__panel">
-          <div className="cam-menu__row">
-            <span className="cam-menu__label">Shape</span>
-            <div className="segmented" role="group" aria-label="Camera shape">
-              {SHAPES.map((sh) => (
-                <button
-                  key={sh}
-                  className={`segmented__btn${settings.cameraShape === sh ? " is-active" : ""}`}
-                  onClick={() => setSettings((s) => ({ ...s, cameraShape: sh }))}
-                  aria-pressed={settings.cameraShape === sh}
-                >
-                  {cap(sh)}
-                </button>
-              ))}
+          {!fullFrame && (
+            <div className="cam-menu__row">
+              <span className="cam-menu__label">Shape</span>
+              <div className="segmented" role="group" aria-label="Camera shape">
+                {SHAPES.map((sh) => (
+                  <button
+                    key={sh}
+                    className={`segmented__btn${settings.cameraShape === sh ? " is-active" : ""}`}
+                    onClick={() => setSettings((s) => ({ ...s, cameraShape: sh }))}
+                    aria-pressed={settings.cameraShape === sh}
+                  >
+                    {cap(sh)}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
 
-          <div className="cam-menu__row">
-            <span className="cam-menu__label">Position</span>
-            <div className="cam-corners" role="group" aria-label="Camera position">
-              {POSITIONS.map((p) => (
-                <button
-                  key={p.id}
-                  className={`cam-corners__btn${settings.cameraPosition === p.id ? " is-active" : ""}`}
-                  onClick={() => setSettings((s) => ({ ...s, cameraPosition: p.id }))}
-                  aria-pressed={settings.cameraPosition === p.id}
-                  aria-label={p.label}
-                  title={p.label}
-                >
-                  <span className="cam-corners__dot" />
-                </button>
-              ))}
+          {!fullFrame && (
+            <div className="cam-menu__row">
+              <span className="cam-menu__label">Position</span>
+              <div className="cam-corners" role="group" aria-label="Camera position">
+                {POSITIONS.map((p) => (
+                  <button
+                    key={p.id}
+                    className={`cam-corners__btn${settings.cameraPosition === p.id ? " is-active" : ""}`}
+                    onClick={() => setSettings((s) => ({ ...s, cameraPosition: p.id }))}
+                    aria-pressed={settings.cameraPosition === p.id}
+                    aria-label={p.label}
+                    title={p.label}
+                  >
+                    <span className="cam-corners__dot" />
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
 
           <div className="cam-menu__row">
             <span className="cam-menu__label">Touch up</span>
