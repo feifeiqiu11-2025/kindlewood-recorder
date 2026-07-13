@@ -162,13 +162,14 @@ export function useCaptureController() {
   // reuses cameraRef). Recording phases own the stream, so this stays out.
   useEffect(() => {
     if (phase !== "idle") return;
-    // Camera-only mode always needs the webcam; screen mode only when opted in.
-    const cameraNeeded = settings.camera || settings.mode === "camera";
-    if (cameraNeeded) {
+    // The Camera checkbox is the single source of truth (it's forced on when
+    // entering "Just me" mode). Acquire the webcam for the live self-view and
+    // reuse that stream for the recording.
+    if (settings.camera) {
       if (cameraRef.current) return;
       let cancelled = false;
       navigator.mediaDevices
-        .getUserMedia({ video: { width: 640, height: 480 }, audio: false })
+        .getUserMedia({ video: { width: 1280, height: 720 }, audio: false })
         .then((cam) => {
           if (cancelled || cameraRef.current) {
             cam.getTracks().forEach((t) => t.stop());
@@ -176,8 +177,15 @@ export function useCaptureController() {
           }
           cameraRef.current = cam;
           setCameraStream(cam);
+          setError(null);
         })
-        .catch(() => {});
+        .catch(() => {
+          if (!cancelled) {
+            setError(
+              "Couldn't access the camera. Allow camera access in your browser, then try again.",
+            );
+          }
+        });
       return () => {
         cancelled = true;
       };
@@ -188,7 +196,7 @@ export function useCaptureController() {
       cameraRef.current = null;
       setCameraStream(null);
     }
-  }, [phase, settings.camera, settings.mode]);
+  }, [phase, settings.camera]);
 
   const cleanupStreams = useCallback(() => {
     for (const r of [displayRef, micRef, cameraRef]) {

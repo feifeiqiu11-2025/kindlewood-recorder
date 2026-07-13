@@ -862,7 +862,8 @@ function RecordControls({
           </button>
           <button
             className={`segmented__btn${camMode ? " is-active" : ""}`}
-            onClick={() => setSettings((s) => ({ ...s, mode: "camera" }))}
+            // Turn the camera on when entering "Just me" — it IS the recording.
+            onClick={() => setSettings((s) => ({ ...s, mode: "camera", camera: true }))}
             aria-pressed={camMode}
             title="Record just yourself on camera — no screen sharing"
           >
@@ -877,18 +878,15 @@ function RecordControls({
           />
           <span>Microphone</span>
         </label>
-        {/* In camera mode the webcam is the recording, so it's always on. */}
-        {!camMode && (
-          <label className="check">
-            <input
-              type="checkbox"
-              checked={settings.camera}
-              onChange={(e) => setSettings((s) => ({ ...s, camera: e.target.checked }))}
-            />
-            <span>Camera</span>
-          </label>
-        )}
-        {(settings.camera || camMode) && (
+        <label className="check">
+          <input
+            type="checkbox"
+            checked={settings.camera}
+            onChange={(e) => setSettings((s) => ({ ...s, camera: e.target.checked }))}
+          />
+          <span>Camera</span>
+        </label>
+        {settings.camera && (
           <CameraOptionsMenu
             settings={settings}
             setSettings={setSettings}
@@ -896,7 +894,14 @@ function RecordControls({
           />
         )}
         <span className="bar__spacer" />
-        <button className="btn btn--primary" onClick={cap.setup} disabled={!cap.supported}>
+        {camMode && !settings.camera && (
+          <span className="bar__hint">Turn on the camera to record yourself.</span>
+        )}
+        <button
+          className="btn btn--primary"
+          onClick={cap.setup}
+          disabled={!cap.supported || (camMode && !settings.camera)}
+        >
           {camMode ? "Set up camera" : "Set up recording"}
         </button>
       </>
