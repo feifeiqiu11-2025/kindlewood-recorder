@@ -727,18 +727,6 @@ export function Studio() {
               {cap.phase === "paused" && (
                 <div className="stage__rec stage__rec--paused">Paused</div>
               )}
-              {(cap.phase === "recording" || cap.phase === "paused") && (
-                <div className="stage__transport">
-                  {cap.phase === "recording" ? (
-                    <button onClick={cap.pause}>Pause</button>
-                  ) : (
-                    <button onClick={cap.resume}>Resume</button>
-                  )}
-                  <button className="stage__transport--stop" onClick={cap.stop}>
-                    Stop
-                  </button>
-                </div>
-              )}
             </div>
           ) : (
             <div className="stage__placeholder">

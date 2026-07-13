@@ -313,44 +313,6 @@
   box-sizing: border-box;
 }
 
-/* Floating transport controls over the camera preview — always reachable even
-   when the stage is expanded and the record bar is scrolled out of view. */
-.stage__transport {
-  position: absolute;
-  bottom: 14px;
-  left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  gap: 8px;
-  z-index: 5;
-}
-
-.stage__transport button {
-  min-height: 34px;
-  padding: 0 14px;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.22);
-  background: rgba(20, 20, 30, 0.62);
-  color: #fff;
-  font-size: 0.85rem;
-  font-weight: 700;
-  cursor: pointer;
-  backdrop-filter: blur(6px);
-}
-
-.stage__transport button:hover {
-  background: rgba(20, 20, 30, 0.82);
-}
-
-.stage__transport .stage__transport--stop {
-  background: rgba(226, 61, 91, 0.9);
-  border-color: transparent;
-}
-
-.stage__transport .stage__transport--stop:hover {
-  background: rgba(226, 61, 91, 1);
-}
-
 /* Teleprompter controls strip (camera mode). */
 .tp-strip {
   display: flex;
