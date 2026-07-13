@@ -123,15 +123,58 @@
   width: auto;
   max-width: 100%;
   margin: 0 auto;
+  flex-shrink: 0;
   background: #08080d;
   border-radius: 14px;
   overflow: hidden;
 }
 
-/* Expanded stage: use most of the viewport height while keeping the ratio, so
-   the speaker sees a bigger view of themselves and the script. */
-.stage--big {
-  height: 82vh;
+/* Overlay expand/minimize button on the recording area. */
+.stage__resize-btn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 6;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: rgba(20, 20, 30, 0.55);
+  color: #fff;
+  cursor: pointer;
+  backdrop-filter: blur(6px);
+  transition: background 0.14s ease;
+}
+
+.stage__resize-btn:hover {
+  background: rgba(20, 20, 30, 0.8);
+}
+
+/* Horizontal drag separator below the stage (resize preview height). */
+.stage-resize {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 14px;
+  margin: 1px auto 0;
+  cursor: row-resize;
+  touch-action: none;
+}
+
+.stage-resize__grip {
+  width: 54px;
+  height: 4px;
+  border-radius: 999px;
+  background: #d9d7e6;
+  transition: background 0.14s ease;
+}
+
+.stage-resize:hover .stage-resize__grip,
+.stage-resize:active .stage-resize__grip {
+  background: #8f83d8;
 }
 
 .stage__live,
@@ -597,12 +640,6 @@
   border-radius: 8px;
 }
 
-.btn.is-active {
-  background: #efebff;
-  border-color: #c9c0ff;
-  color: #4b2ed6;
-}
-
 .btn--primary {
   background: #6d4dff;
   border-color: #6d4dff;
@@ -710,9 +747,11 @@
   .tp-strip {
     color: #a8a8c0;
   }
-  .btn.is-active {
-    background: #34285f;
-    border-color: #5a48a8;
-    color: #d8ccff;
+  .stage-resize__grip {
+    background: #3a3a54;
+  }
+  .stage-resize:hover .stage-resize__grip,
+  .stage-resize:active .stage-resize__grip {
+    background: #6a5db8;
   }
 }

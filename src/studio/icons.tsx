@@ -82,3 +82,15 @@ export const TrashIcon = () => (
     <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6" />
   </svg>
 );
+
+export const ExpandIcon = () => (
+  <svg {...sm}>
+    <path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" />
+  </svg>
+);
+
+export const CompressIcon = () => (
+  <svg {...sm}>
+    <path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5" />
+  </svg>
+);

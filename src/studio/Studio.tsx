@@ -24,7 +24,7 @@ import { dbToGain } from "./audio";
 import { ASPECTS, aspectCss, aspectDims, type Aspect } from "./aspect";
 import { ZoomTargetOverlay } from "./ZoomTargetOverlay";
 import { focusFromClient } from "./stageGeometry";
-import { SoundsIcon, MusicIcon, ZoomIcon, ScriptIcon } from "./icons";
+import { SoundsIcon, MusicIcon, ZoomIcon, ScriptIcon, ExpandIcon, CompressIcon } from "./icons";
 import { CameraPreview } from "./CameraPreview";
 import { CameraOptionsMenu } from "./CameraOptionsMenu";
 import "./Studio.css";
@@ -65,8 +65,11 @@ export function Studio() {
   const [pipWindow, setPipWindow] = useState<Window | null>(null);
   const [zoomLevel, setZoomLevel] = useState(1);
   const [aspect, setAspect] = useState<Aspect>("16:9");
-  // Enlarge the preview stage to use most of the viewport (keeps the ratio).
-  const [bigStage, setBigStage] = useState(false);
+  // Preview stage height in px — adjustable via the overlay expand/minimize
+  // button or by dragging the separator below the stage. Ratio is preserved.
+  const viewportH = typeof window !== "undefined" ? window.innerHeight : 800;
+  const [stageHeight, setStageHeight] = useState(() => Math.round(viewportH * 0.54));
+  const stageDragRef = useRef<{ startY: number; startH: number } | null>(null);
 
   // Teleprompter (presenter aid — never recorded or exported).
   const [script, setScript] = useState("");
@@ -453,6 +456,28 @@ export function Studio() {
         : "Move the playhead inside the selected clip to split"
       : "Select a clip to split";
 
+  // Stage sizing: drag the separator below the stage, or toggle the overlay
+  // expand/minimize button. All preserve the chosen aspect ratio.
+  const stageMax = Math.round(viewportH * 0.92);
+  const stageDefault = Math.round(viewportH * 0.54);
+  const stageBig = Math.round(viewportH * 0.85);
+  const stageIsBig = stageHeight >= Math.round(viewportH * 0.72);
+  const onStageResizeDown = (e: React.PointerEvent) => {
+    stageDragRef.current = { startY: e.clientY, startH: stageHeight };
+    e.currentTarget.setPointerCapture(e.pointerId);
+  };
+  const onStageResizeMove = (e: React.PointerEvent) => {
+    const d = stageDragRef.current;
+    if (!d) return;
+    const next = Math.min(stageMax, Math.max(220, d.startH + (e.clientY - d.startY)));
+    setStageHeight(next);
+  };
+  const onStageResizeUp = (e: React.PointerEvent) => {
+    if (!stageDragRef.current) return;
+    stageDragRef.current = null;
+    e.currentTarget.releasePointerCapture(e.pointerId);
+  };
+
   const zoomPanel = (
     <div className="panel">
       <button className="btn btn--primary panel__add" onClick={addZoom} disabled={!editing}>
@@ -509,14 +534,6 @@ export function Studio() {
         <header className="studio__header">
           <h1 className="studio__title">KindleWood Recorder</h1>
           <div className="studio__header-actions">
-            <button
-              className={`btn btn--sm${bigStage ? " is-active" : ""}`}
-              onClick={() => setBigStage((b) => !b)}
-              aria-pressed={bigStage}
-              title={bigStage ? "Shrink the preview" : "Enlarge the preview (keeps the ratio)"}
-            >
-              {bigStage ? "Shrink" : "Expand"}
-            </button>
             <div className="segmented" role="group" aria-label="Aspect ratio">
               {ASPECTS.map((a) => (
                 <button
@@ -611,9 +628,18 @@ export function Studio() {
         <video ref={videoRef} playsInline className="studio__source" />
 
         <div
-          className={`stage${bigStage ? " stage--big" : ""}`}
-          style={{ aspectRatio: aspectCss(aspect) }}
+          className="stage"
+          style={{ aspectRatio: aspectCss(aspect), height: `${stageHeight}px` }}
         >
+          <button
+            className="stage__resize-btn"
+            onClick={() => setStageHeight(stageIsBig ? stageDefault : stageBig)}
+            aria-pressed={stageIsBig}
+            title={stageIsBig ? "Minimize preview" : "Expand preview"}
+            aria-label={stageIsBig ? "Minimize preview" : "Expand preview"}
+          >
+            {stageIsBig ? <CompressIcon /> : <ExpandIcon />}
+          </button>
           {editing ? (
             <>
               <canvas ref={canvasRef} className="stage__canvas" onPointerDown={onCanvasPointerDown} />
@@ -729,6 +755,21 @@ export function Studio() {
               )}
             </div>
           )}
+        </div>
+
+        {/* Horizontal separator: drag to resize the preview height. */}
+        <div
+          className="stage-resize"
+          role="separator"
+          aria-orientation="horizontal"
+          aria-label="Drag to resize preview (double-click to reset)"
+          title="Drag to resize · double-click to reset"
+          onPointerDown={onStageResizeDown}
+          onPointerMove={onStageResizeMove}
+          onPointerUp={onStageResizeUp}
+          onDoubleClick={() => setStageHeight(stageDefault)}
+        >
+          <span className="stage-resize__grip" />
         </div>
 
         {showTeleOverlay && (
